@@ -5,7 +5,7 @@
  */
 
 const API = {
-    BASE_URL: process.env.API_URL || 'http://localhost:5000/api',
+    BASE_URL: window.APP_CONFIG?.API_BASE_URL || 'http://localhost:5000/api',
     TIMEOUT: 5000,
 
     /**

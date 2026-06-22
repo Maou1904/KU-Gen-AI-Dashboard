@@ -40,8 +40,7 @@ router.get('/model-consumption', async (req, res) => {
     try {
         // Try to fetch from database
         try {
-            const sequelize = req.app.locals.sequelize;
-            const ModelConsumption = sequelize.model('ModelConsumption');
+            const { ModelConsumption } = req.app.locals.models || {};
             
             if (ModelConsumption) {
                 const data = await ModelConsumption.findAll({
@@ -81,8 +80,7 @@ router.get('/hierarchy', async (req, res) => {
     try {
         // Try to fetch from database
         try {
-            const sequelize = req.app.locals.sequelize;
-            const Hierarchy = sequelize.model('Hierarchy');
+            const { Hierarchy } = req.app.locals.models || {};
             
             if (Hierarchy) {
                 const data = await Hierarchy.findAll({
@@ -123,14 +121,13 @@ router.get('/costs', async (req, res) => {
     try {
         // Calculate from database if available
         try {
-            const sequelize = req.app.locals.sequelize;
-            const ModelConsumption = sequelize.model('ModelConsumption');
+            const { ModelConsumption } = req.app.locals.models || {};
             
             if (ModelConsumption) {
                 const consumption = await ModelConsumption.findAll();
                 
                 if (consumption.length > 0) {
-                    const totalCost = consumption.reduce((sum, item) => sum + (item.cost || 0), 0);
+                    const totalCost = consumption.reduce((sum, item) => sum + Number(item.cost || 0), 0);
                     const currentCycle = totalCost * 0.84; // Assume 84% of month has passed
 
                     return res.json({

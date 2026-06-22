@@ -1,147 +1,107 @@
 # KU Gen-AI Dashboard
 
-A modern, responsive analytics dashboard built with **HTML**, **JavaScript**, and **Tailwind CSS**.
+Analytics dashboard workspace split into a static frontend and an Express backend API.
 
-## 📁 Project Structure
+## Project Structure
 
+```text
+frontend/
+  index.html
+  js/
+    api-service.js
+    app.js
+    charts.js
+    mock-data.js
+
+backend/
+  config/
+    database.js
+  models/
+    index.js
+  routes/
+    apiManagement.js
+    behavior.js
+    dashboard.js
+    department.js
+  .env.example
+  package.json
+  server.js
+
+package.json
+README.md
 ```
-public/
-├── index.html          # Main HTML entry point
-├── js/
-│   ├── app.js          # Main app logic & routing
-│   ├── mock-data.js    # Mock data generators
-│   └── charts.js       # Chart.js wrapper functions
-package.json            # Project dependencies
-README.md               # This file
-```
 
-## 🎨 Features
+## Quick Start
 
-- **Multi-page Dashboard** with client-side routing (hash-based)
-- **Real-time Charts** using Chart.js (Bar, Line, Doughnut)
-- **Responsive Design** with Tailwind CSS
-- **Material Design Icons** for UI elements
-- **Glass-morphism UI** with modern styling
-- **Mock Data** built-in for testing
+Install frontend tooling from the project root:
 
-## 📊 Pages
-
-1. **Dashboard Overview** - System metrics & trending topics
-2. **API Management** - Token consumption & cost breakdown
-3. **Department Analytics** - Faculty & department insights
-4. **User Behavior** - User activity & app distribution
-5. **Settings** - Configuration (placeholder)
-
-## 🚀 Quick Start
-
-### Using Node.js (Recommended)
-
-1. Install dependencies:
 ```bash
 npm install
 ```
 
-2. Start the development server:
+Install backend dependencies:
+
 ```bash
-npm start
+npm --prefix backend install
 ```
 
-3. Open in browser:
-```
-http://localhost:8080
-```
+Run the frontend:
 
-### Using Python
-
-1. Navigate to project directory:
 ```bash
-cd e:\WORK\Comsci\Coop\KU-Gen-AI-Dashboard
+npm run frontend
 ```
 
-2. Start Python HTTP server:
+Run the backend in a second terminal:
+
 ```bash
-python -m http.server 8080 --directory public
+npm run backend
 ```
 
-3. Open in browser:
-```
-http://localhost:8080
-```
+Default URLs:
 
-### Using Live Server (VS Code Extension)
+- Frontend: `http://localhost:8080`
+- Backend API: `http://localhost:5000/api`
+- Health check: `http://localhost:5000/api/health`
 
-1. Install "Live Server" extension
-2. Right-click `public/index.html`
-3. Select "Open with Live Server"
+## Database Setup
 
-## 🛠️ Technology Stack
+The backend is prepared for MySQL through Sequelize.
 
-- **Frontend Framework**: Vanilla JavaScript (No framework overhead)
-- **CSS Framework**: Tailwind CSS (CDN)
-- **Charts**: Chart.js 4.4.0
-- **Icons**: Material Symbols (Google Fonts)
-- **Server**: http-server (Node.js) or Python
+1. Copy `backend/.env.example` to `backend/.env`.
+2. Update these values:
 
-## 📝 Usage
-
-### Navigation
-- Click sidebar menu items to navigate between pages
-- URLs use hash routing (e.g., `#/api`, `#/department`)
-
-### Charts
-- All charts are interactive with hover tooltips
-- Built with Chart.js for high performance
-- Responsive and mobile-friendly
-
-### Mock Data
-- All data is generated from `js/mock-data.js`
-- Easy to swap with real API data
-- Data structure is consistent across pages
-
-## 🔧 Customization
-
-### Change Theme Colors
-Edit the Tailwind config in `public/index.html`:
-```javascript
-colors: {
-    "primary": "#0d631b",
-    "secondary": "#556158",
-    // ... more colors
-}
+```env
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=kucsgenai_dashboard
+DB_USER=root
+DB_PASSWORD=
+DB_DIALECT=mysql
+DB_SYNC=true
+DB_SYNC_ALTER=false
 ```
 
-### Add New Page
-1. Create a new route in `App.render()` method
-2. Create page HTML generator method (e.g., `createNewPage()`)
-3. Add navigation link in sidebar
-4. Initialize charts if needed
+3. Create the database in MySQL:
 
-### Replace Mock Data
-1. Update `js/mock-data.js` with real API calls
-2. Update data fetching in `App.js` methods
-3. No need to change UI - same data structure
+```sql
+CREATE DATABASE kucsgenai_dashboard CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
 
-## 📱 Responsive Design
+4. Start the backend. If MySQL is unavailable, the API stays online and returns mock data.
 
-- Sidebar (fixed width: 256px)
-- Main content area auto-adjusts
-- Grid layout (12 columns) for bento design
-- Mobile-ready (collapse sidebar on small screens)
+## Useful Scripts
 
-## 🎯 Future Enhancements
+```bash
+npm start              # same as npm run frontend
+npm run frontend       # serve frontend on port 8080
+npm run backend        # start backend API
+npm run backend:dev    # start backend with nodemon
+npm run install:all    # install root and backend dependencies
+npm --prefix backend run check
+```
 
-- [ ] Database integration
-- [ ] User authentication
-- [ ] Real-time data updates
-- [ ] Export to PDF/CSV
-- [ ] Dark mode toggle
-- [ ] Custom date range filtering
-- [ ] Advanced charting options
+## Notes
 
-## 📄 License
-
-Created for KU Gen-AI Project
-
-## 👤 Author
-
-KU Gen-AI Development Team
+- The frontend reads API data from `http://localhost:5000/api` by default.
+- Override the frontend API URL by setting `window.APP_CONFIG = { API_BASE_URL: '...' }` before `js/api-service.js` loads.
+- Backend routes fall back to mock data until real rows exist in the database tables.

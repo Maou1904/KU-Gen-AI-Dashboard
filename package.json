@@ -1,11 +1,13 @@
 {
   "name": "kucsgenai-dashboard",
   "version": "1.0.0",
-  "description": "KU Gen-AI Dashboard using HTML, JavaScript, and Tailwind CSS",
-  "main": "index.js",
+  "description": "KU Gen-AI Dashboard frontend and backend workspace",
   "scripts": {
-    "start": "http-server public -p 8080 -c-1",
-    "dev": "http-server public -p 8080 -c-1"
+    "start": "npm run frontend",
+    "frontend": "http-server frontend -p 8080 -c-1",
+    "backend": "npm --prefix backend start",
+    "backend:dev": "npm --prefix backend run dev",
+    "install:all": "npm install && npm --prefix backend install"
   },
   "dependencies": {},
   "devDependencies": {

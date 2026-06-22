@@ -235,7 +235,7 @@ const App = {
                             <span class="font-headline-md text-headline-md text-primary font-bold">-$${Math.abs(costs.costEfficiency)}</span>
                         </div>
                         <div class="mt-md p-md bg-primary/10 border border-primary rounded-lg">
-                            <p class="font-body-md text-body-md text-primary">✓ Caching saved ~${costs.cachingSavings}% this period.</p>
+                            <p class="font-body-md text-body-md text-primary">Caching saved ~${costs.cachingSavings}% this period.</p>
                         </div>
                     </div>
                 </div>
@@ -334,7 +334,7 @@ const App = {
             <div class="col-span-12 glass-panel rounded-xl p-lg">
                 <div class="flex justify-between items-center mb-lg">
                     <h3 class="font-title-lg text-title-lg text-on-surface">Department Summary</h3>
-                    <a href="#" class="font-label-md text-label-md text-primary hover:text-primary/80 transition-colors">View Detailed Report →</a>
+                    <a href="#" class="font-label-md text-label-md text-primary hover:text-primary/80 transition-colors">View Detailed Report -></a>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-body-md">
@@ -363,7 +363,7 @@ const App = {
                                     <td class="py-md px-md text-body-md text-on-surface">$${dept.costAllocation.toLocaleString()}</td>
                                     <td class="py-md px-md">
                                         <span class="px-md py-xs rounded-full font-label-md text-label-md ${dept.statusColor || 'bg-primary'} text-on-primary text-xs">
-                                            ● ${dept.status || 'Active'}
+                                            ${dept.status || 'Active'}
                                         </span>
                                     </td>
                                 </tr>

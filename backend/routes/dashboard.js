@@ -40,22 +40,23 @@ const mockTrendingTopics = [
  */
 router.get('/metrics', async (req, res) => {
     try {
-        const sequelize = req.app.locals.sequelize;
-        
         // Try to fetch from database
         try {
-            const { Dashboard } = require('../models');
-            const metrics = await Dashboard.findAll({
-                limit: 4,
-                order: [['createdAt', 'DESC']]
-            });
+            const { Dashboard } = req.app.locals.models || {};
 
-            if (metrics.length > 0) {
-                return res.json({
-                    success: true,
-                    data: metrics,
-                    source: 'database'
+            if (Dashboard) {
+                const metrics = await Dashboard.findAll({
+                    limit: 4,
+                    order: [['createdAt', 'DESC']]
                 });
+
+                if (metrics.length > 0) {
+                    return res.json({
+                        success: true,
+                        data: metrics,
+                        source: 'database'
+                    });
+                }
             }
         } catch (dbError) {
             console.log('Database query failed, using mock data');
@@ -82,8 +83,7 @@ router.get('/monthly-usage', async (req, res) => {
     try {
         // Try to fetch from database
         try {
-            const sequelize = req.app.locals.sequelize;
-            const MonthlyUsage = sequelize.model('MonthlyUsage');
+            const { MonthlyUsage } = req.app.locals.models || {};
             
             if (MonthlyUsage) {
                 const data = await MonthlyUsage.findAll({
@@ -124,8 +124,7 @@ router.get('/trending-topics', async (req, res) => {
     try {
         // Try to fetch from database
         try {
-            const sequelize = req.app.locals.sequelize;
-            const TrendingTopic = sequelize.model('TrendingTopic');
+            const { TrendingTopic } = req.app.locals.models || {};
             
             if (TrendingTopic) {
                 const data = await TrendingTopic.findAll({

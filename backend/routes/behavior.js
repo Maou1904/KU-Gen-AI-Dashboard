@@ -44,23 +44,18 @@ router.get('/daily-users', async (req, res) => {
     try {
         // Try to fetch from database
         try {
-            const sequelize = req.app.locals.sequelize;
-            const UserActivity = sequelize.model('UserActivity');
+            const { UserActivity } = req.app.locals.models || {};
             
             if (UserActivity) {
                 const data = await UserActivity.findAll({
                     order: [['date', 'ASC']],
-                    limit: 7,
-                    attributes: [
-                        ['date', 'day'],
-                        ['activeUsers', 'users']
-                    ]
+                    limit: 7
                 });
 
                 if (data.length > 0) {
                     const formatted = data.map(d => ({
                         day: new Date(d.date).toLocaleDateString('en-US', { weekday: 'short' }),
-                        users: d.dataValues.users
+                        users: d.activeUsers
                     }));
                     
                     return res.json({
@@ -95,8 +90,7 @@ router.get('/trending-tags', async (req, res) => {
     try {
         // Try to fetch from database
         try {
-            const sequelize = req.app.locals.sequelize;
-            const TrendingTopic = sequelize.model('TrendingTopic');
+            const { TrendingTopic } = req.app.locals.models || {};
             
             if (TrendingTopic) {
                 const data = await TrendingTopic.findAll({
@@ -140,8 +134,7 @@ router.get('/app-distribution', async (req, res) => {
     try {
         // Try to fetch from database
         try {
-            const sequelize = req.app.locals.sequelize;
-            const AppDistribution = sequelize.model('AppDistribution');
+            const { AppDistribution } = req.app.locals.models || {};
             
             if (AppDistribution) {
                 const data = await AppDistribution.findAll({

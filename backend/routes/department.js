@@ -42,8 +42,7 @@ router.get('/summary', async (req, res) => {
     try {
         // Try to fetch from database
         try {
-            const sequelize = req.app.locals.sequelize;
-            const Department = sequelize.model('Department');
+            const { Department } = req.app.locals.models || {};
             
             if (Department) {
                 const data = await Department.findAll({

@@ -35,11 +35,11 @@ const MockData = {
 
     getHierarchyData() {
         return [
-            { campus: 'Bangkhen', faculty: 'Faculty of Engineering', department: 'Computer Engineering', tokens: 24600000 },
-            { campus: 'Bangkhen', faculty: 'Faculty of Science', department: 'Data Science Institute', tokens: 18200000 },
-            { campus: 'Kamphaeng Saen', faculty: 'Faculty of Agriculture', department: 'Smart Farming Lab', tokens: 9850000 },
-            { campus: 'Siriracha', faculty: 'Faculty of Management Sciences', department: 'FinTech Research', tokens: 6400000 },
-            { campus: 'Bangkhen', faculty: 'Library Services', department: 'Digital Archives', tokens: 3300000 }
+            { campus: 'Bangkhen', faculty: 'Faculty of Engineering', department: 'Computer Engineering', tokensUsed: 24600000 },
+            { campus: 'Bangkhen', faculty: 'Faculty of Science', department: 'Data Science Institute', tokensUsed: 18200000 },
+            { campus: 'Kamphaeng Saen', faculty: 'Faculty of Agriculture', department: 'Smart Farming Lab', tokensUsed: 9850000 },
+            { campus: 'Siriracha', faculty: 'Faculty of Management Sciences', department: 'FinTech Research', tokensUsed: 6400000 },
+            { campus: 'Bangkhen', faculty: 'Library Services', department: 'Digital Archives', tokensUsed: 3300000 }
         ];
     },
 
