@@ -1,0 +1,14 @@
+{
+  "name": "kucsgenai-dashboard",
+  "version": "1.0.0",
+  "description": "KU Gen-AI Dashboard using HTML, JavaScript, and Tailwind CSS",
+  "main": "index.js",
+  "scripts": {
+    "start": "http-server public -p 8080 -c-1",
+    "dev": "http-server public -p 8080 -c-1"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}

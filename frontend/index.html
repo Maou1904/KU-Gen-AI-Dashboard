@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KUCSGenAI Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0d631b",
+                        "primary-container": "#2e7d32",
+                        "on-primary": "#ffffff",
+                        "on-primary-container": "#cbffc2",
+                        "secondary": "#556158",
+                        "secondary-container": "#d9e6da",
+                        "on-secondary": "#ffffff",
+                        "on-secondary-container": "#5b675e",
+                        "tertiary": "#0054a7",
+                        "tertiary-container": "#246dc8",
+                        "on-tertiary": "#ffffff",
+                        "on-tertiary-container": "#edf1ff",
+                        "error": "#ba1a1a",
+                        "error-container": "#ffdad6",
+                        "on-error": "#ffffff",
+                        "background": "#fbf9f9",
+                        "on-background": "#1b1c1c",
+                        "surface": "#fbf9f9",
+                        "on-surface": "#1b1c1c",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-low": "#f5f3f3",
+                        "surface-container": "#efeded",
+                        "surface-container-high": "#e9e8e7",
+                        "surface-container-highest": "#e3e2e2",
+                        "on-surface-variant": "#40493d",
+                        "outline": "#707a6c",
+                        "outline-variant": "#bfcaba"
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.125rem",
+                        lg: "0.25rem",
+                        xl: "0.5rem",
+                        full: "0.75rem"
+                    },
+                    spacing: {
+                        base: "4px",
+                        gutter: "24px",
+                        xs: "4px",
+                        "2xl": "48px",
+                        md: "16px",
+                        xl: "32px",
+                        "margin-desktop": "40px",
+                        lg: "24px",
+                        "margin-mobile": "16px",
+                        sm: "8px"
+                    },
+                    fontSize: {
+                        "display-lg": ["48px", { lineHeight: "56px", letterSpacing: "-0.02em", fontWeight: "700" }],
+                        "headline-lg": ["32px", { lineHeight: "40px", letterSpacing: "-0.01em", fontWeight: "600" }],
+                        "headline-md": ["24px", { lineHeight: "32px", fontWeight: "600" }],
+                        "title-lg": ["20px", { lineHeight: "28px", fontWeight: "500" }],
+                        "label-md": ["12px", { lineHeight: "16px", letterSpacing: "0.05em", fontWeight: "600" }],
+                        "body-lg": ["16px", { lineHeight: "24px", fontWeight: "400" }],
+                        "body-md": ["14px", { lineHeight: "20px", fontWeight: "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #fbf9f9; color: #1b1c1c; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid #bfcaba;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 24px;
+        }
+        .page-content { display: none; }
+        .page-content.active { display: block; animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .chart-container { position: relative; height: 300px; margin-bottom: 20px; }
+        .api-status {
+            position: fixed;
+            bottom-20px;
+            right-20px;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .api-status.connected { background: #d9e6da; color: #0d631b; }
+        .api-status.disconnected { background: #ffdad6; color: #ba1a1a; }
+        .api-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        .api-status.connected .api-status-dot { background: #0d631b; }
+        .api-status.disconnected .api-status-dot { background: #ba1a1a; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="font-body-md text-body-md antialiased overflow-hidden h-screen flex">
+    <!-- Sidebar -->
+    <nav class="h-screen w-64 fixed left-0 top-0 bg-surface border-r border-outline-variant flex flex-col p-md overflow-y-auto z-50">
+        <div class="mb-xl">
+            <h1 class="font-headline-md text-headline-md font-bold text-primary">KUCSGenAI</h1>
+            <p class="font-label-md text-label-md text-on-surface-variant uppercase mt-xs">Admin Console</p>
+        </div>
+        <button class="w-full bg-primary text-on-primary font-label-md text-label-md py-sm px-md rounded-lg mb-xl flex items-center justify-center gap-sm hover:bg-primary/90 transition-colors">
+            <span class="material-symbols-outlined text-[18px]">add</span> New Analysis
+        </button>
+        <ul class="flex flex-col gap-xs flex-1" id="sidebar-menu">
+            <li><a href="#/dashboard" class="nav-link flex items-center gap-md px-md py-sm bg-secondary-container text-primary rounded-lg cursor-pointer transition-all duration-200 font-label-md text-label-md">
+                <span class="material-symbols-outlined">dashboard</span> Dashboard
+            </a></li>
+            <li><a href="#/api" class="nav-link flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-high transition-colors rounded-lg cursor-pointer font-label-md text-label-md">
+                <span class="material-symbols-outlined">api</span> API Management
+            </a></li>
+            <li><a href="#/department" class="nav-link flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-high transition-colors rounded-lg cursor-pointer font-label-md text-label-md">
+                <span class="material-symbols-outlined">leaderboard</span> Department Rankings
+            </a></li>
+            <li><a href="#/behavior" class="nav-link flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-high transition-colors rounded-lg cursor-pointer font-label-md text-label-md">
+                <span class="material-symbols-outlined">person_search</span> User Behavior
+            </a></li>
+            <li><a href="#/settings" class="nav-link flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-high transition-colors rounded-lg cursor-pointer font-label-md text-label-md">
+                <span class="material-symbols-outlined">settings</span> Settings
+            </a></li>
+        </ul>
+        <div class="mt-auto border-t border-outline-variant pt-md">
+            <ul class="flex flex-col gap-xs">
+                <li><a href="#" class="flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-high transition-colors rounded-lg cursor-pointer font-label-md text-label-md">
+                    <span class="material-symbols-outlined text-[18px]">help</span> Support
+                </a></li>
+                <li><a href="#" class="flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-high transition-colors rounded-lg cursor-pointer font-label-md text-label-md">
+                    <span class="material-symbols-outlined text-[18px]">description</span> Documentation
+                </a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Main Content Wrapper -->
+    <div class="flex-1 flex flex-col ml-64 overflow-hidden bg-background">
+        <!-- Header -->
+        <header class="sticky top-0 z-40 bg-surface border-b border-outline-variant flex justify-between items-center h-16 px-margin-desktop">
+            <div class="flex items-center gap-md">
+                <div class="relative">
+                    <span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-outline">search</span>
+                    <input class="pl-xl pr-md py-sm bg-surface-container-low border border-outline-variant rounded-full font-body-md text-body-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all w-64" placeholder="Search analytics...">
+                </div>
+            </div>
+            <div class="flex items-center gap-lg">
+                <div class="flex items-center gap-sm">
+                    <button class="p-xs text-on-surface-variant hover:bg-surface-container-low rounded-full transition-all">
+                        <span class="material-symbols-outlined">notifications</span>
+                        <span class="absolute top-1 right-1 w-2 h-2 bg-error rounded-full"></span>
+                    </button>
+                    <button class="p-xs text-on-surface-variant hover:bg-surface-container-low rounded-full transition-all">
+                        <span class="material-symbols-outlined">history_edu</span>
+                    </button>
+                </div>
+                <div class="flex items-center gap-md border-l border-outline-variant pl-lg">
+                    <button class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors">Help</button>
+                    <button class="font-label-md text-label-md text-primary font-semibold hover:text-primary/80 transition-colors">Log Out</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 overflow-y-auto p-margin-desktop" id="page-container">
+            <!-- Pages will be loaded here -->
+        </main>
+    </div>
+
+    <!-- API Status Indicator -->
+    <div id="api-status" class="api-status disconnected">
+        <div class="api-status-dot"></div>
+        <span id="api-status-text">Connecting...</span>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/api-service.js"></script>
+    <script src="js/mock-data.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
