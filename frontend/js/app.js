@@ -146,7 +146,7 @@ const App = {
 
             <div class="bento-grid">
                 ${this.createChartCard('Monthly Usage Trends', 'monthlyChart')}
-                <div class="col-span-6 glass-panel rounded-xl p-lg">
+                <div class="col-span-6 self-start glass-panel rounded-xl p-lg">
                     <div class="flex justify-between items-center mb-md">
                         <h3 class="font-title-lg text-title-lg text-on-surface">Trending Topics</h3>
                         <span class="material-symbols-outlined">tag</span>
@@ -157,32 +157,6 @@ const App = {
                                 ${typeof t === 'string' ? t : t.tag || t.modelName}
                             </span>
                         `).join('')}
-                    </div>
-                    <div class="mt-lg pt-lg border-t border-outline-variant">
-                        <h4 class="font-title-lg text-title-lg text-on-surface mb-md">Quick Actions</h4>
-                        <div class="flex flex-col gap-md">
-                            <a href="#" class="flex items-center justify-between px-md py-sm rounded-lg bg-surface-container-low hover:bg-surface-container-high transition-colors">
-                                <span class="flex items-center gap-md">
-                                    <span class="material-symbols-outlined text-primary">manage_accounts</span>
-                                    <span class="font-label-md text-label-md">Manage Coins</span>
-                                </span>
-                                <span class="material-symbols-outlined">chevron_right</span>
-                            </a>
-                            <a href="#" class="flex items-center justify-between px-md py-sm rounded-lg bg-surface-container-low hover:bg-surface-container-high transition-colors">
-                                <span class="flex items-center gap-md">
-                                    <span class="material-symbols-outlined text-primary">favorite</span>
-                                    <span class="font-label-md text-label-md">System Health</span>
-                                </span>
-                                <span class="material-symbols-outlined">chevron_right</span>
-                            </a>
-                            <a href="#" class="flex items-center justify-between px-md py-sm rounded-lg bg-surface-container-low hover:bg-surface-container-high transition-colors">
-                                <span class="flex items-center gap-md">
-                                    <span class="material-symbols-outlined text-primary">security</span>
-                                    <span class="font-label-md text-label-md">User Audit Logs</span>
-                                </span>
-                                <span class="material-symbols-outlined">chevron_right</span>
-                            </a>
-                        </div>
                     </div>
                 </div>
             </div>
