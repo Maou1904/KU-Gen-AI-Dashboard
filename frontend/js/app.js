@@ -272,24 +272,32 @@ const App = {
             </div>
 
             <div class="bento-grid mb-gutter">
-                ${this.createChartCard('Monthly Growth Rates by Dept', 'growthChart')}
-                <div class="col-span-6 glass-panel rounded-xl p-lg">
+                ${this.createChartCard('Monthly Growth Trends', 'growthChart')}
+                <div class="col-span-6 glass-panel rounded-xl p-lg flex flex-col">
                     <div class="flex justify-between items-center mb-md">
                         <h3 class="font-title-lg text-title-lg text-on-surface">Peak Usage Heatmap</h3>
                         <span class="material-symbols-outlined">grid_on</span>
                     </div>
-                    <div class="flex gap-md">
-                        <div class="space-y-md">
-                            <div class="text-xs font-label-md text-on-surface-variant">M T W T F S S</div>
-                            <div id="heatmap-grid" class="grid gap-1" style="grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(4, 1fr);">
+                    <div class="grid grid-cols-[1fr_auto] gap-md flex-1 min-h-[260px]">
+                        <div class="grid grid-rows-[auto_1fr] gap-sm min-w-0">
+                            <div class="grid grid-cols-7 text-xs font-label-md text-on-surface-variant text-center">
+                                <span>M</span>
+                                <span>T</span>
+                                <span>W</span>
+                                <span>T</span>
+                                <span>F</span>
+                                <span>S</span>
+                                <span>S</span>
+                            </div>
+                            <div id="heatmap-grid" class="grid gap-2 h-full" style="grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(4, 1fr);">
                                 ${this.generateHeatmapGrid()}
                             </div>
                         </div>
-                        <div class="flex flex-col justify-between text-xs font-label-md text-on-surface-variant">
-                            <div>9a</div>
-                            <div>12p</div>
-                            <div>3p</div>
-                            <div>8p</div>
+                        <div class="grid grid-rows-4 gap-2 pt-6 text-xs font-label-md text-on-surface-variant">
+                            <div class="flex items-center">9a</div>
+                            <div class="flex items-center">12p</div>
+                            <div class="flex items-center">3p</div>
+                            <div class="flex items-center">8p</div>
                         </div>
                     </div>
                     <div class="mt-md flex items-center justify-between text-xs">
@@ -445,7 +453,7 @@ const App = {
         let html = '';
         for (let i = 0; i < 28; i++) {
             const intensity = Math.floor(Math.random() * 4);
-            html += `<div class="w-6 h-6 rounded" style="background-color: ${colors[intensity]};"></div>`;
+            html += `<div class="w-full h-full rounded" style="background-color: ${colors[intensity]};"></div>`;
         }
         return html;
     },
