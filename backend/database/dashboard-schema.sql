@@ -34,6 +34,22 @@ CREATE TABLE IF NOT EXISTS etl_data_quality (
     checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS sync_schedule (
+    schedule_id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (schedule_id = 1),
+    is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    interval_minutes INTEGER NOT NULL DEFAULT 15 CHECK (interval_minutes BETWEEN 1 AND 10080),
+    overlap_minutes INTEGER NOT NULL DEFAULT 10 CHECK (overlap_minutes BETWEEN 0 AND 1440),
+    batch_size INTEGER NOT NULL DEFAULT 500 CHECK (batch_size BETWEEN 10 AND 10000),
+    last_started_at TIMESTAMPTZ,
+    next_run_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by VARCHAR(100) NOT NULL DEFAULT 'system'
+);
+
+INSERT INTO sync_schedule (schedule_id)
+VALUES (1)
+ON CONFLICT (schedule_id) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS dim_org_unit (
     org_unit_key BIGSERIAL PRIMARY KEY,
     parent_org_unit_key BIGINT REFERENCES dim_org_unit(org_unit_key),
@@ -198,6 +214,7 @@ CREATE TABLE IF NOT EXISTS fact_user_activity_daily (
     transaction_count BIGINT NOT NULL,
     total_tokens BIGINT NOT NULL,
     cost_thb NUMERIC(20, 6) NOT NULL,
+    total_coins NUMERIC(20, 6) NOT NULL,
     refreshed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (activity_date, user_key, app_key)
 );
@@ -227,6 +244,7 @@ CREATE TABLE IF NOT EXISTS agg_usage_hourly (
     active_user_count BIGINT NOT NULL,
     total_tokens BIGINT NOT NULL,
     cost_thb NUMERIC(20, 6) NOT NULL,
+    total_coins NUMERIC(20, 6) NOT NULL,
     refreshed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (usage_date, hour_bucket, org_unit_key, app_key)
 );
@@ -239,4 +257,3 @@ CREATE TABLE IF NOT EXISTS agg_topic_daily (
     refreshed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (topic_date, tag_key, org_unit_key)
 );
-

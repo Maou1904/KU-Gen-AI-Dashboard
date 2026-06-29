@@ -31,7 +31,7 @@ const MockData = {
             kpis: [
                 { label: 'ACTIVE USERS', value: users.toLocaleString(), change: '+12.5% from last month', icon: 'group', type: 'positive' },
                 { label: 'TOKEN CONSUMPTION', value: `${tokens.toFixed(1)}M`, change: '+8.2% from last month', icon: 'token', type: 'positive' },
-                { label: 'ESTIMATED COST', value: `$${cost.toLocaleString()}`, change: 'Steady from last month', icon: 'payments', type: 'neutral' },
+                { label: 'COIN CONSUMPTION', value: `${cost.toLocaleString()} Coin`, change: 'Steady from last month', icon: 'toll', type: 'neutral' },
                 { label: 'TOTAL TRANSACTIONS', value: `${transactions.toFixed(1)}k`, change: '+15.1% from last month', icon: 'forum', type: 'positive' },
             ],
             monthly: this.getMonthlyUsageData(period, scopeFactor),
@@ -136,7 +136,7 @@ const MockData = {
             name,
             faculty,
             totalModelsUsed: Math.round(tokens * periodFactor),
-            costAllocation: Number((cost * periodFactor).toFixed(2)),
+            coinConsumption: Number((cost * periodFactor).toFixed(2)),
         }));
     },
 

@@ -203,6 +203,95 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
+        @media (max-width: 768px) {
+            body > nav {
+                width: 72px !important;
+                padding: 12px 8px !important;
+            }
+            body > nav > div:first-child {
+                justify-content: center;
+                margin-bottom: 24px !important;
+            }
+            body > nav > div:first-child > div:last-child,
+            body > nav .nav-link:not(.material-symbols-outlined) {
+                overflow: hidden;
+            }
+            body > nav > div:first-child > div:last-child {
+                display: none;
+            }
+            body > nav a {
+                justify-content: center;
+                gap: 0;
+                font-size: 0 !important;
+                padding-left: 8px !important;
+                padding-right: 8px !important;
+            }
+            body > nav a .material-symbols-outlined {
+                font-size: 22px !important;
+            }
+            body > div.flex-1 {
+                flex: none;
+                width: calc(100% - 72px);
+                margin-left: 72px;
+            }
+            body > div.flex-1 > header {
+                height: 56px;
+                padding-left: 16px;
+                padding-right: 16px;
+            }
+            #page-container {
+                padding: 16px;
+            }
+            #page-container > .flex.justify-between,
+            #page-container > .flex.justify-between > .flex {
+                align-items: flex-start;
+                flex-direction: column !important;
+                flex-wrap: wrap;
+                gap: 12px;
+            }
+            .filter-group {
+                max-width: 100%;
+                overflow-x: auto;
+            }
+            .filter-tab {
+                min-width: 68px;
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+            .bento-grid {
+                grid-template-columns: minmax(0, 1fr) !important;
+                gap: 16px;
+            }
+            .bento-grid > [class*="col-span-"] {
+                grid-column: 1 / -1 !important;
+                min-width: 0;
+            }
+            .bento-grid > .grid,
+            .bento-grid .grid:has(.chart-container-lg) {
+                grid-template-columns: minmax(0, 1fr) !important;
+            }
+            #page-container .bento-grid > .grid.grid-cols-2 {
+                grid-template-columns: minmax(0, 1fr) !important;
+            }
+            #page-container .bento-grid > .grid > [class*="col-span-"] {
+                grid-column: 1 / -1 !important;
+            }
+            #page-container .grid-cols-4 {
+                grid-template-columns: minmax(0, 1fr) !important;
+            }
+            .chart-container-lg {
+                height: 320px;
+            }
+            .data-table td,
+            .data-table th {
+                padding: 12px 16px;
+                white-space: nowrap;
+            }
+            .api-status {
+                right: 12px;
+                bottom: 12px;
+            }
+        }
     </style>
 </head>
 <body class="font-body-md text-body-md antialiased overflow-hidden h-screen flex">

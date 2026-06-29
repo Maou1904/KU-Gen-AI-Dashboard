@@ -1,186 +1,78 @@
-/**
- * User Behavior Routes
- * GET /api/behavior/daily-users - Daily active users
- * GET /api/behavior/trending-tags - Popular conversation tags
- * GET /api/behavior/app-distribution - App usage distribution
- */
-
 const express = require('express');
+const { dashboardPool } = require('../config/database');
+
 const router = express.Router();
 
-// Mock data fallback
-const mockDailyUsers = [
-    { day: 'Mon', users: 1500 },
-    { day: 'Tue', users: 2100 },
-    { day: 'Wed', users: 1900 },
-    { day: 'Thu', users: 2800 },
-    { day: 'Fri', users: 3200 },
-    { day: 'Sat', users: 4100 },
-    { day: 'Sun', users: 5842 }
-];
-
-const mockTrendingTags = [
-    '#MachineLearning', '#DataPipelines', '#EthicsInAI', '#NLP', '#QuantumComputing',
-    '#ResearchGrants', '#LLM', '#Bioinformatics', '#CyberSecurity', '#FacultySupportProgram'
-];
-
-const mockAppDistribution = [
-    { app: 'Research Assistant AI', percentage: 60, usageCount: 8520 },
-    { app: 'Grant Writer Pro', percentage: 30, usageCount: 4260 },
-    { app: 'Syllabus Generator', percentage: 10, usageCount: 1420 }
-];
-
-const mockBehaviorKPI = {
-    totalNotesGenerated: 142853,
-    totalNotesGeneratedChange: 12.4,
-    avgNotesPerUser: 114.48
-};
-
-/**
- * GET /api/behavior/daily-users
- * Fetch daily active users trend
- */
-router.get('/daily-users', async (req, res) => {
+router.get('/daily-users', async (req, res, next) => {
     try {
-        // Try to fetch from database
-        try {
-            const { UserActivity } = req.app.locals.models || {};
-            
-            if (UserActivity) {
-                const data = await UserActivity.findAll({
-                    order: [['date', 'ASC']],
-                    limit: 7
-                });
-
-                if (data.length > 0) {
-                    const formatted = data.map(d => ({
-                        day: new Date(d.date).toLocaleDateString('en-US', { weekday: 'short' }),
-                        users: d.activeUsers
-                    }));
-                    
-                    return res.json({
-                        success: true,
-                        data: formatted,
-                        source: 'database'
-                    });
-                }
-            }
-        } catch (dbError) {
-            console.log('Database query failed, using mock data');
-        }
-
-        // Fallback to mock data
-        res.json({
-            success: true,
-            data: mockDailyUsers,
-            source: 'mock'
-        });
-
+        const { rows } = await dashboardPool.query(
+            `SELECT
+                activity_date AS date,
+                COUNT(DISTINCT user_key)::bigint AS users
+             FROM fact_user_activity_daily
+             GROUP BY activity_date
+             ORDER BY activity_date`
+        );
+        res.json({ success: true, data: rows, source: 'dashboard_test' });
     } catch (error) {
-        console.error('Error fetching daily users:', error);
-        res.status(500).json({ error: error.message });
+        next(error);
     }
 });
 
-/**
- * GET /api/behavior/trending-tags
- * Fetch trending conversation tags
- */
-router.get('/trending-tags', async (req, res) => {
+router.get('/trending-tags', async (req, res, next) => {
     try {
-        // Try to fetch from database
-        try {
-            const { TrendingTopic } = req.app.locals.models || {};
-            
-            if (TrendingTopic) {
-                const data = await TrendingTopic.findAll({
-                    where: { period: 'weekly' },
-                    order: [['frequency', 'DESC']],
-                    limit: 15,
-                    attributes: ['tag']
-                });
-
-                if (data.length > 0) {
-                    const tags = data.map(d => d.tag);
-                    return res.json({
-                        success: true,
-                        data: tags,
-                        source: 'database'
-                    });
-                }
-            }
-        } catch (dbError) {
-            console.log('Database query failed, using mock data');
-        }
-
-        // Fallback to mock data
-        res.json({
-            success: true,
-            data: mockTrendingTags,
-            source: 'mock'
-        });
-
+        const { rows } = await dashboardPool.query(
+            `SELECT t.display_tag AS tag, SUM(a.note_count)::bigint AS frequency
+             FROM agg_topic_daily a
+             JOIN dim_tag t ON t.tag_key = a.tag_key
+             GROUP BY t.tag_key, t.display_tag
+             ORDER BY frequency DESC
+             LIMIT 15`
+        );
+        res.json({ success: true, data: rows, source: 'dashboard_test' });
     } catch (error) {
-        console.error('Error fetching trending tags:', error);
-        res.status(500).json({ error: error.message });
+        next(error);
     }
 });
 
-/**
- * GET /api/behavior/app-distribution
- * Fetch application usage distribution
- */
-router.get('/app-distribution', async (req, res) => {
+router.get('/app-distribution', async (req, res, next) => {
     try {
-        // Try to fetch from database
-        try {
-            const { AppDistribution } = req.app.locals.models || {};
-            
-            if (AppDistribution) {
-                const data = await AppDistribution.findAll({
-                    order: [['percentage', 'DESC']]
-                });
-
-                if (data.length > 0) {
-                    return res.json({
-                        success: true,
-                        data: data,
-                        source: 'database'
-                    });
-                }
-            }
-        } catch (dbError) {
-            console.log('Database query failed, using mock data');
-        }
-
-        // Fallback to mock data
-        res.json({
-            success: true,
-            data: mockAppDistribution,
-            source: 'mock'
-        });
-
+        const { rows } = await dashboardPool.query(
+            `WITH app_usage AS (
+                SELECT
+                    a.app_name,
+                    COUNT(*)::bigint AS usage_count,
+                    COUNT(DISTINCT f.user_key)::bigint AS active_users
+                FROM fact_usage_event f
+                JOIN dim_app a ON a.app_key = f.app_key
+                GROUP BY a.app_key, a.app_name
+             )
+             SELECT
+                app_name AS app,
+                usage_count AS "usageCount",
+                active_users AS "activeUsers",
+                ROUND(usage_count * 100.0 / NULLIF(SUM(usage_count) OVER (), 0), 2) AS percentage
+             FROM app_usage
+             ORDER BY usage_count DESC`
+        );
+        res.json({ success: true, data: rows, source: 'dashboard_test' });
     } catch (error) {
-        console.error('Error fetching app distribution:', error);
-        res.status(500).json({ error: error.message });
+        next(error);
     }
 });
 
-/**
- * GET /api/behavior/kpi
- * Fetch behavior KPIs
- */
-router.get('/kpi', async (req, res) => {
+router.get('/kpi', async (req, res, next) => {
     try {
-        res.json({
-            success: true,
-            data: mockBehaviorKPI,
-            source: 'mock'
-        });
-
+        const { rows } = await dashboardPool.query(
+            `SELECT
+                COUNT(*) FILTER (WHERE is_active)::bigint AS "totalNotesGenerated",
+                COUNT(DISTINCT user_key) FILTER (WHERE is_active)::bigint AS "noteAuthors",
+                MAX(created_at) AS "dataAsOf"
+             FROM fact_note`
+        );
+        res.json({ success: true, data: rows[0], source: 'dashboard_test' });
     } catch (error) {
-        console.error('Error fetching behavior KPI:', error);
-        res.status(500).json({ error: error.message });
+        next(error);
     }
 });
 

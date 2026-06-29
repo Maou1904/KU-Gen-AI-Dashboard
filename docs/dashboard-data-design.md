@@ -6,7 +6,7 @@
 ## 1. ข้อสรุปเชิงสถาปัตยกรรม
 
 - ใช้ `kucsgenai.user_app_usage` เป็น canonical usage event เพราะเชื่อม user และ app ได้โดยตรง
-  และมี token, ราคา, THB, coin และเวลาอยู่ในแถวเดียว
+  และมี token, ราคา, THB, Coin และเวลาอยู่ในแถวเดียว โดยใช้ `total_coins` เป็นหน่วยหลักของ Dashboard
 - ใช้ `dify` เป็น runtime enrichment สำหรับ latency, status, error, workflow และ model invocation
   ห้ามนำ `messages`, `workflow_runs` และ `user_app_usage` มาบวกเป็น transaction รวมกันโดยตรง
   เพราะหนึ่งการใช้งานอาจปรากฏในหลายตาราง
@@ -89,7 +89,7 @@
 |---|---|---|
 | Active Users | `COUNT(DISTINCT user_key)` ของ usage ในช่วงที่เลือก | `kucsgenai.user_app_usage` |
 | Token Consumption | `SUM(total_tokens)` | `kucsgenai.user_app_usage` |
-| Estimated Cost | `SUM(total_thb)`; ถ้าไม่มีให้คำนวณจาก price/rate แล้วติด quality flag | `kucsgenai.user_app_usage` |
+| Coin Consumption | `SUM(total_coins)` | `kucsgenai.user_app_usage` |
 | Total Transactions | `COUNT(*)` ของ canonical usage event | `kucsgenai.user_app_usage` |
 | Monthly Transaction Trends | transaction แยกตามเดือน | Dashboard `agg_usage_daily` |
 | Trending Note Topics | แตก `ai_notes.tags` แล้วนับ frequency | `kucsgenai.ai_notes` |
@@ -117,7 +117,7 @@
 |---|---|---|
 | Total Transactions | canonical usage ตาม scope และ period | Dashboard fact/aggregate |
 | Active Users | distinct user ตาม scope และ period | Dashboard user activity |
-| Estimated Cost | THB เป็นค่าเริ่มต้น หรือเลือก currency ชัดเจน | canonical usage |
+| Coin Consumption | ผลรวม `total_coins` ตาม scope และ period | canonical usage |
 | Peak Usage Heatmap | จำนวน transaction ตาม day-of-week และ 3-hour bucket | event timestamp |
 | Department Summary | token และ cost รวมตาม department/faculty | event org snapshot |
 | Pagination / Export | query แบบ server-side พร้อม total count | Dashboard API |
@@ -200,10 +200,12 @@ DDL เริ่มต้นอยู่ที่ `backend/database/dashboard-sc
 
 ## 7. ประเด็นที่ต้องตกลงก่อนขึ้น Production
 
-1. แหล่ง master ของ campus/faculty/department ต้องชัดเจน เพราะ `userInfo` ปัจจุบันไม่ครอบคลุม
+1. ระยะแรกใช้ campus/faculty/department เท่าที่พบใน `userInfo` และกำหนดค่าที่หาไม่ได้เป็น
+   `Unknown` ห้ามเดาชื่อหน่วยงาน ส่วนแหล่ง Organization Master ที่ครอบคลุมทุกวิทยาเขต
+   ยังเป็นงานค้างที่ต้องเตือนและยืนยันก่อนขึ้น production
 2. กำหนดว่า transaction หมายถึง portal usage หนึ่งแถว, conversation, message หรือ workflow run
    แบบนี้เสนอให้ใช้ portal usage หนึ่งแถว
-3. กำหนดสกุลเงินหลักของ Dashboard; แนะนำ THB และเก็บ original currency/rate ไว้ตรวจสอบ
+3. หน่วยหลักที่แสดงบน Dashboard คือ Coin จาก `user_app_usage.total_coins`
+   โดยยังเก็บ original currency, original price, THB และ exchange rate แยกกันเพื่อ audit
 4. Model comparison ต้องยอมรับ fallback attribution สำหรับข้อมูลเก่าที่ไม่มี model invocation
 5. ห้ามเปิด `DB_SYNC_ALTER` ใน production; ใช้ migration ที่ review แล้วเท่านั้น
-

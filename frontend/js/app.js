@@ -250,7 +250,7 @@ const App = {
 
     createConsumptionPage() {
         const { period, compareYears, hierarchy } = this.state.consumption;
-        const costs = { currentBillingCycle: 4285.50, projectedEndOfMonth: 5100, costEfficiency: -120, cachingSavings: 8 };
+        const costs = { currentBillingCycle: 4285.50, projectedEndOfMonth: 5100, usageChange: -120, cachingSavings: 8 };
         const hierarchyRows = MockData.getHierarchyData(hierarchy);
         const timeFilters = this.createFilterGroup(['7 Days', 'Month', 'Year', 'Custom'], period, 'consumption', 'period');
         const facultyOptions = this.getHierarchyFaculties(hierarchy.campus);
@@ -259,7 +259,7 @@ const App = {
         return `
             ${this.createPageHeader(
                 'Consumption',
-                'Monitor token usage and estimated billing across models and campus hierarchies.',
+                'Monitor token and Coin consumption across models and campus hierarchies.',
                 timeFilters
             )}
 
@@ -293,19 +293,19 @@ const App = {
                 <div class="col-span-4 grid gap-gutter">
                     <div class="glass-panel rounded-lg p-lg">
                         <h3 class="font-title-lg text-title-lg text-primary mb-lg flex items-center gap-sm">
-                            <span class="material-symbols-outlined">payments</span> Estimated Cost
+                            <span class="material-symbols-outlined">toll</span> Coin Consumption
                         </h3>
-                        <p class="font-label-md text-label-md text-on-surface-variant mb-md">Current Billing Cycle (Month-to-Date)</p>
-                        <div class="font-display-lg text-display-lg text-on-surface mb-xl">$${costs.currentBillingCycle.toLocaleString()}</div>
+                        <p class="font-label-md text-label-md text-on-surface-variant mb-md">Current Month-to-Date</p>
+                        <div class="font-display-lg text-display-lg text-on-surface mb-xl">${costs.currentBillingCycle.toLocaleString()} <span class="text-headline-md">Coin</span></div>
                         <div class="pt-md border-t border-outline-variant flex justify-between items-center">
                             <span class="font-label-md text-label-md text-tertiary">Projected End of Month</span>
-                            <span class="font-title-lg text-title-lg text-on-surface">~$${costs.projectedEndOfMonth.toLocaleString()}</span>
+                            <span class="font-title-lg text-title-lg text-on-surface">~${costs.projectedEndOfMonth.toLocaleString()} Coin</span>
                         </div>
                     </div>
 
                     <div class="rounded-lg p-lg bg-secondary-container border border-outline-variant min-h-[180px]">
-                        <p class="font-label-md text-label-md text-on-surface-variant mb-md">Cost Efficiency</p>
-                        <div class="font-headline-lg text-headline-lg text-primary mb-md">-$${Math.abs(costs.costEfficiency)} <span class="font-body-lg text-body-lg text-on-surface-variant">vs last month</span></div>
+                        <p class="font-label-md text-label-md text-on-surface-variant mb-md">Usage Change</p>
+                        <div class="font-headline-lg text-headline-lg text-primary mb-md">${costs.usageChange > 0 ? '+' : '-'}${Math.abs(costs.usageChange)} Coin <span class="font-body-lg text-body-lg text-on-surface-variant">vs last month</span></div>
                         <div class="h-2 bg-surface-container-high rounded-full overflow-hidden mb-sm">
                             <div class="h-full bg-primary rounded-full" style="width: 68%;"></div>
                         </div>
@@ -398,14 +398,14 @@ const App = {
                     ${this.createKPICard('Total Transactions', this.formatCompact(departments.reduce((sum, item) => sum + item.totalModelsUsed, 0)), '+15.3% from last month', 'query_stats', 'positive')}
                     ${this.createKPICard('Active Users', '8,432', '+4.2% from last month', 'group', 'positive')}
                     <div class="col-span-2 rounded-lg p-lg min-h-[190px] bg-[#e2f8e2] border border-[#d5ecd5] relative overflow-hidden">
-                        <span class="absolute right-6 top-1/2 -translate-y-1/2 text-[140px] leading-none text-primary/10 font-bold">$</span>
+                        <span class="material-symbols-outlined absolute right-6 top-1/2 -translate-y-1/2 text-[120px] leading-none text-primary/10">toll</span>
                         <div class="relative">
                             <div class="flex justify-between items-start mb-lg">
-                                <h3 class="font-title-lg text-title-lg text-on-surface">Estimated Cost (Compute)</h3>
+                                <h3 class="font-title-lg text-title-lg text-on-surface">Coin Consumption</h3>
                                 <span class="px-md py-xs rounded-full bg-secondary-container text-primary font-label-md text-label-md">${scope}</span>
                             </div>
-                            <div class="font-display-lg text-display-lg text-[#12bd39]">$${departments.reduce((sum, item) => sum + item.costAllocation, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}<span class="text-headline-md">.00</span></div>
-                            <p class="font-label-md text-label-md text-on-surface-variant mt-sm">Projected by selected period</p>
+                            <div class="font-display-lg text-display-lg text-[#12bd39]">${departments.reduce((sum, item) => sum + item.coinConsumption, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} <span class="text-headline-md">Coin</span></div>
+                            <p class="font-label-md text-label-md text-on-surface-variant mt-sm">Consumed in selected period</p>
                         </div>
                     </div>
                 </div>
@@ -448,7 +448,7 @@ const App = {
                                 <th class="text-left">Department</th>
                                 <th class="text-left">Faculty/Division</th>
                                 <th class="text-left">Total Tokens Used</th>
-                                <th class="text-left">Total Estimated Costs</th>
+                                <th class="text-left">Coin Consumption</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -457,7 +457,7 @@ const App = {
                                     <td class="font-semibold">${dept.name}</td>
                                     <td>${dept.faculty}</td>
                                     <td>${dept.totalModelsUsed.toLocaleString()}</td>
-                                    <td>$${dept.costAllocation.toLocaleString()}</td>
+                                    <td>${dept.coinConsumption.toLocaleString()} Coin</td>
                                 </tr>
                             `).join('')}
                         </tbody>

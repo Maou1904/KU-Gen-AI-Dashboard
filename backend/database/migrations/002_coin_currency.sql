@@ -1,0 +1,9 @@
+BEGIN;
+
+ALTER TABLE fact_user_activity_daily
+    ADD COLUMN IF NOT EXISTS total_coins NUMERIC(20, 6) NOT NULL DEFAULT 0;
+
+ALTER TABLE agg_usage_hourly
+    ADD COLUMN IF NOT EXISTS total_coins NUMERIC(20, 6) NOT NULL DEFAULT 0;
+
+COMMIT;

@@ -65,29 +65,37 @@ Default URLs:
 
 ## Database Setup
 
-The backend is prepared for MySQL through Sequelize.
+The backend uses three PostgreSQL databases:
+
+- `kucsgenai_dashboard_test`: isolated test target
+- `kucsgenai`: read-only source
+- `dify`: read-only source
 
 1. Copy `backend/.env.example` to `backend/.env`.
 2. Update these values:
 
 ```env
-DB_HOST=localhost
-DB_PORT=3306
-DB_NAME=kucsgenai_dashboard
-DB_USER=root
-DB_PASSWORD=
-DB_DIALECT=mysql
-DB_SYNC=true
-DB_SYNC_ALTER=false
+PG_HOST=localhost
+PG_PORT=5432
+PG_USER=postgres
+PG_PASSWORD=your-local-postgres-password
+DASHBOARD_DB_NAME=kucsgenai_dashboard_test
+KUCSGENAI_DB_NAME=kucsgenai
+DIFY_DB_NAME=dify
+RUN_MIGRATIONS=true
 ```
 
-3. Create the database in MySQL:
+3. Apply the reviewed schema:
 
-```sql
-CREATE DATABASE kucsgenai_dashboard CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```bash
+npm --prefix backend run migrate
 ```
 
-4. Start the backend. If MySQL is unavailable, the API stays online and returns mock data.
+4. Start the backend and open the isolated sync console:
+
+- `http://localhost:8080/sync-test.html`
+
+The schedule is disabled by default. Use `Run Now` for the first test.
 
 ## Useful Scripts
 
@@ -98,6 +106,8 @@ npm run backend        # start backend API
 npm run backend:dev    # start backend with nodemon
 npm run install:all    # install root and backend dependencies
 npm --prefix backend run check
+npm --prefix backend run migrate
+npm --prefix backend run sync:once
 ```
 
 ## Notes

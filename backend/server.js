@@ -8,16 +8,18 @@ const cors = require('cors');
 require('dotenv').config();
 
 const {
-    sequelize,
-    models,
     connectDatabase,
     getDatabaseStatus,
+    closeDatabases,
 } = require('./config/database');
+const migrate = require('./database/migrate');
+const scheduler = require('./services/scheduler');
 
 const dashboardRoutes = require('./routes/dashboard');
 const apiManagementRoutes = require('./routes/apiManagement');
 const departmentRoutes = require('./routes/department');
 const behaviorRoutes = require('./routes/behavior');
+const syncRoutes = require('./routes/sync');
 
 const app = express();
 
@@ -28,14 +30,13 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.locals.sequelize = sequelize;
-app.locals.models = models;
 app.locals.getDatabaseStatus = getDatabaseStatus;
 
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/api-management', apiManagementRoutes);
 app.use('/api/department', departmentRoutes);
 app.use('/api/behavior', behaviorRoutes);
+app.use('/api/sync', syncRoutes);
 
 app.get('/api/health', (req, res) => {
     res.json({
@@ -60,13 +61,28 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
-    await connectDatabase();
+    const connection = await connectDatabase();
+    if (connection.status.dashboard === 'connected') {
+        if (String(process.env.RUN_MIGRATIONS || 'true').toLowerCase() === 'true') {
+            await migrate();
+        }
+        await scheduler.start();
+    }
 
-    return app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
         console.log(`Server running on http://localhost:${PORT}`);
         console.log(`Dashboard API: http://localhost:${PORT}/api`);
         console.log(`Health check: http://localhost:${PORT}/api/health`);
     });
+
+    const shutdown = async () => {
+        scheduler.stop();
+        server.close();
+        await closeDatabases();
+    };
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
+    return server;
 };
 
 if (require.main === module) {

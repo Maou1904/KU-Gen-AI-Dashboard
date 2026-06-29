@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KU GenAI Sync Test</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+    <style>
+        :root {
+            color-scheme: light;
+            --green: #0d631b;
+            --green-soft: #e3f3e4;
+            --ink: #1c211d;
+            --muted: #617066;
+            --line: #cad4cc;
+            --surface: #f7faf7;
+            --white: #fff;
+            --danger: #b3261e;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--surface);
+            color: var(--ink);
+            font-family: "Noto Sans Thai", sans-serif;
+        }
+        button, input, select { font: inherit; }
+        header {
+            height: 64px;
+            padding: 0 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--white);
+            border-bottom: 1px solid var(--line);
+        }
+        header strong { font-size: 18px; }
+        main { max-width: 1180px; margin: 0 auto; padding: 28px; }
+        .heading { display: flex; justify-content: space-between; align-items: end; margin-bottom: 22px; }
+        h1 { margin: 0 0 4px; font-size: 28px; }
+        p { margin: 0; color: var(--muted); }
+        .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+        .panel {
+            background: var(--white);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .settings { grid-column: span 5; }
+        .status { grid-column: span 7; }
+        .full { grid-column: 1 / -1; }
+        .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+        label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
+        input, select {
+            width: 100%;
+            min-height: 42px;
+            padding: 8px 10px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: var(--white);
+            color: var(--ink);
+        }
+        .toggle { display: flex; align-items: center; gap: 10px; grid-column: 1 / -1; color: var(--ink); }
+        .toggle input { width: 18px; min-height: 18px; }
+        .actions { display: flex; gap: 10px; margin-top: 18px; }
+        button {
+            min-height: 42px;
+            border: 1px solid var(--green);
+            border-radius: 6px;
+            padding: 8px 14px;
+            cursor: pointer;
+            background: var(--white);
+            color: var(--green);
+            font-weight: 600;
+        }
+        button.primary { background: var(--green); color: var(--white); }
+        button:disabled { cursor: wait; opacity: .55; }
+        .status-line { display: flex; gap: 8px; align-items: center; margin-top: 16px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+        .dot.ok { background: var(--green); }
+        .dot.error { background: var(--danger); }
+        .metrics { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 18px; }
+        .metric { padding: 14px; background: var(--green-soft); border-radius: 6px; }
+        .metric span { display: block; color: var(--muted); font-size: 12px; }
+        .metric strong { display: block; margin-top: 4px; font-size: 22px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+        th, td { text-align: left; padding: 11px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
+        th { color: var(--muted); font-weight: 600; }
+        .badge { display: inline-block; padding: 3px 8px; border-radius: 999px; background: var(--green-soft); color: var(--green); }
+        .badge.failed { background: #f9dedc; color: var(--danger); }
+        #message { min-height: 22px; margin-top: 12px; color: var(--muted); }
+        @media (max-width: 800px) {
+            main { padding: 18px; }
+            .settings, .status { grid-column: 1 / -1; }
+            .fields, .metrics { grid-template-columns: 1fr; }
+            .heading { align-items: start; gap: 12px; flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>KU GenAI Dashboard</strong>
+        <span>Sync Test Environment</span>
+    </header>
+    <main>
+        <div class="heading">
+            <div>
+                <h1>Data Sync Control</h1>
+                <p>ฐานทดสอบแยกจาก Dashboard หลัก</p>
+            </div>
+            <button id="refresh-button" title="Refresh status">
+                <span class="material-symbols-outlined">refresh</span>
+            </button>
+        </div>
+
+        <div class="grid">
+            <section class="panel settings">
+                <h2>Schedule</h2>
+                <div class="fields">
+                    <label class="toggle">
+                        <input id="sync-enabled" type="checkbox">
+                        เปิดการดึงข้อมูลอัตโนมัติ
+                    </label>
+                    <label>
+                        รอบการดึงข้อมูล
+                        <select id="interval-minutes">
+                            <option value="5">ทุก 5 นาที</option>
+                            <option value="15">ทุก 15 นาที</option>
+                            <option value="30">ทุก 30 นาที</option>
+                            <option value="60">ทุก 1 ชั่วโมง</option>
+                            <option value="360">ทุก 6 ชั่วโมง</option>
+                            <option value="1440">ทุก 1 วัน</option>
+                        </select>
+                    </label>
+                    <label>
+                        อ่านย้อนหลังซ้ำ
+                        <input id="overlap-minutes" type="number" min="0" max="1440" value="10">
+                    </label>
+                    <label>
+                        จำนวนต่อ batch
+                        <input id="batch-size" type="number" min="10" max="10000" value="500">
+                    </label>
+                </div>
+                <div class="actions">
+                    <button id="save-button" class="primary">บันทึก Schedule</button>
+                    <button id="run-button">Run Now</button>
+                </div>
+                <div id="message"></div>
+            </section>
+
+            <section class="panel status">
+                <h2>Current Status</h2>
+                <div class="status-line">
+                    <span id="status-dot" class="dot"></span>
+                    <strong id="status-text">กำลังตรวจสอบ</strong>
+                </div>
+                <p id="schedule-text"></p>
+                <div class="metrics">
+                    <div class="metric"><span>Apps</span><strong id="count-apps">0</strong></div>
+                    <div class="metric"><span>Users</span><strong id="count-users">0</strong></div>
+                    <div class="metric"><span>Usage</span><strong id="count-usage">0</strong></div>
+                    <div class="metric"><span>Models</span><strong id="count-models">0</strong></div>
+                    <div class="metric"><span>Notes</span><strong id="count-notes">0</strong></div>
+                </div>
+            </section>
+
+            <section class="panel full">
+                <h2>Recent Runs</h2>
+                <div style="overflow-x:auto">
+                    <table>
+                        <thead>
+                            <tr><th>Run</th><th>Started</th><th>Status</th><th>Rows</th><th>Error</th></tr>
+                        </thead>
+                        <tbody id="runs-body"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </main>
+    <script src="js/sync-test.js"></script>
+</body>
+</html>
+
