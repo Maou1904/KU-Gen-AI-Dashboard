@@ -12,6 +12,26 @@ router.get('/status', async (req, res, next) => {
     }
 });
 
+router.get('/preflight', async (req, res, next) => {
+    try {
+        const status = await syncService.getStatus();
+        const ready = status.connections.every(connection =>
+            connection.name === 'dashboard'
+                ? connection.status === 'connected' && connection.canWrite
+                : connection.status === 'connected' && connection.safeReadOnly
+        );
+        res.status(ready ? 200 : 503).json({
+            success: ready,
+            data: {
+                ready,
+                connections: status.connections,
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
 router.put('/schedule', async (req, res, next) => {
     try {
         const data = await syncService.updateSchedule(
@@ -36,4 +56,3 @@ router.post('/run', async (req, res, next) => {
 });
 
 module.exports = router;
-

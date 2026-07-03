@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS dim_org_unit (
     parent_org_unit_key BIGINT REFERENCES dim_org_unit(org_unit_key),
     source_system VARCHAR(50) NOT NULL,
     source_code VARCHAR(150) NOT NULL,
-    org_level VARCHAR(30) NOT NULL CHECK (org_level IN ('university', 'campus', 'faculty', 'department', 'unit')),
+    org_level VARCHAR(30) NOT NULL CHECK (org_level IN ('campus', 'faculty', 'department')),
     name_th VARCHAR(255),
     name_en VARCHAR(255),
     valid_from TIMESTAMPTZ NOT NULL,

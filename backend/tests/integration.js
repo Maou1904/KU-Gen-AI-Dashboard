@@ -34,9 +34,11 @@ const run = async () => {
     const checks = [
         ['/api/health'],
         ['/api/sync/status'],
+        ['/api/sync/preflight'],
         ['/api/dashboard/metrics'],
         ['/api/dashboard/monthly-usage'],
         ['/api/dashboard/trending-topics'],
+        ['/api/api-management/provider-consumption'],
         ['/api/api-management/model-consumption'],
         ['/api/api-management/hierarchy'],
         ['/api/api-management/costs'],
@@ -71,7 +73,51 @@ const run = async () => {
 
     const status = await request(baseUrl, '/api/sync/status');
     results.syncCounts = status.data.counts;
+    const sources = status.data.connections.filter(connection => connection.name !== 'dashboard');
+    if (sources.some(connection => !connection.safeReadOnly)) {
+        throw new Error('Source database connections must be protected as read only');
+    }
     const schedule = status.data.schedule;
+
+    const providers = await request(baseUrl, '/api/api-management/provider-consumption');
+    const providerNames = providers.data.map(item => item.family);
+    if (!providerNames.includes('GPT') || !providerNames.includes('Gemini')) {
+        throw new Error('Provider consumption must include GPT and Gemini families');
+    }
+    const gptModels = await request(baseUrl, '/api/api-management/model-consumption?family=GPT');
+    if (!gptModels.data.length || gptModels.data.some(item => !item.modelName)) {
+        throw new Error('GPT provider drilldown must return model names');
+    }
+
+    const appDistribution = await request(baseUrl, '/api/behavior/app-distribution');
+    const percentageTotal = appDistribution.data.reduce(
+        (sum, item) => sum + Number(item.percentage),
+        0
+    );
+    if (Math.abs(percentageTotal - 100) > 0.1 || appDistribution.data.length > 6) {
+        throw new Error('Top Active Apps must be Top 5 plus Other and total 100%');
+    }
+
+    const hierarchy = await request(baseUrl, '/api/api-management/hierarchy');
+    if (hierarchy.data.some(item =>
+        item.campus === 'Unknown'
+        || item.faculty === 'Unknown'
+        || item.department === 'Unknown'
+    )) {
+        throw new Error('Hierarchy API must not synthesize Unknown organization levels');
+    }
+
+    const filtered = await request(
+        baseUrl,
+        '/api/dashboard/metrics?start=2025-06-01&end=2025-06-30&campuses=B'
+    );
+    const filteredTransactions = filtered.data.find(
+        item => item.metricName === 'TOTAL_TRANSACTIONS'
+    );
+    if (Number(filteredTransactions?.value) !== 1) {
+        throw new Error('Hierarchy and date filter contract did not affect dashboard metrics');
+    }
+
     await request(baseUrl, '/api/sync/schedule', {
         method: 'PUT',
         body: JSON.stringify({

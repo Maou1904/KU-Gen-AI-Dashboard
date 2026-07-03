@@ -1,19 +1,74 @@
 const express = require('express');
 const { dashboardPool } = require('../config/database');
+const { usageFilter, usageSource } = require('./filter-utils');
 
 const router = express.Router();
+const modelFamilySql = alias => `CASE
+    WHEN ${alias}.provider = 'unknown' OR ${alias}.model_name = 'unknown' THEN 'Unattributed'
+    WHEN LOWER(${alias}.provider || ' ' || ${alias}.model_name) ~ 'openai|(^|[/ -])(gpt|chatgpt|o1|o3|o4)([/ :.-]|$)' THEN 'GPT'
+    WHEN LOWER(${alias}.provider || ' ' || ${alias}.model_name) ~ 'gemini|google' THEN 'Gemini'
+    WHEN LOWER(${alias}.provider || ' ' || ${alias}.model_name) ~ 'claude|anthropic' THEN 'Claude'
+    WHEN LOWER(${alias}.provider || ' ' || ${alias}.model_name) ~ 'grok|x-ai' THEN 'Grok'
+    WHEN LOWER(${alias}.provider || ' ' || ${alias}.model_name) ~ 'mistral' THEN 'Mistral'
+    WHEN LOWER(${alias}.provider || ' ' || ${alias}.model_name) ~ 'deepseek' THEN 'DeepSeek'
+    WHEN LOWER(${alias}.provider || ' ' || ${alias}.model_name) ~ 'nova|bedrock|amazon' THEN 'Amazon'
+    ELSE 'Other'
+END`;
+
+router.get('/provider-consumption', async (req, res, next) => {
+    try {
+        const filter = usageFilter(req, 's');
+        const { rows } = await dashboardPool.query(
+            `WITH model_scope AS (
+                SELECT f.*, u.campus, u.faculty, u.department
+                FROM fact_model_usage_event f
+                LEFT JOIN ${usageSource} u
+                    ON u.usage_event_key = f.usage_event_key
+             ), totals AS (
+                SELECT
+                    ${modelFamilySql('m')} AS family,
+                    SUM(s.total_tokens)::bigint AS tokens,
+                    COUNT(*)::bigint AS events
+                FROM model_scope s
+                JOIN dim_model m ON m.model_key = s.model_key
+                WHERE ${filter.sql}
+                GROUP BY ${modelFamilySql('m')}
+             )
+             SELECT
+                family,
+                tokens,
+                events,
+                ROUND(tokens * 100.0 / NULLIF(SUM(tokens) OVER (), 0), 2) AS percentage
+             FROM totals
+             ORDER BY tokens DESC`,
+            filter.params
+        );
+        res.json({ success: true, data: rows, source: 'dashboard_test' });
+    } catch (error) {
+        next(error);
+    }
+});
 
 router.get('/model-consumption', async (req, res, next) => {
     try {
+        const family = req.query.family || null;
+        const filter = usageFilter(req, 's');
         const { rows } = await dashboardPool.query(
-            `WITH totals AS (
+            `WITH model_scope AS (
+                SELECT f.*, u.campus, u.faculty, u.department
+                FROM fact_model_usage_event f
+                LEFT JOIN ${usageSource} u
+                    ON u.usage_event_key = f.usage_event_key
+             ), totals AS (
                 SELECT
                     m.model_name,
                     m.provider,
-                    SUM(f.total_tokens)::bigint AS tokens,
-                    SUM(COALESCE(f.total_price, 0)) AS cost
-                FROM fact_model_usage_event f
-                JOIN dim_model m ON m.model_key = f.model_key
+                    SUM(s.total_tokens)::bigint AS tokens,
+                    SUM(COALESCE(s.total_price, 0)) AS cost
+                FROM model_scope s
+                JOIN dim_model m ON m.model_key = s.model_key
+                WHERE ($6::text IS NULL OR ${modelFamilySql('m')} = $6)
+                  AND ${filter.sql}
                 GROUP BY m.model_key, m.model_name, m.provider
              )
              SELECT
@@ -23,7 +78,8 @@ router.get('/model-consumption', async (req, res, next) => {
                 cost,
                 ROUND(tokens * 100.0 / NULLIF(SUM(tokens) OVER (), 0), 2) AS percentage
              FROM totals
-             ORDER BY tokens DESC`
+             ORDER BY tokens DESC`,
+            [...filter.params, family]
         );
         res.json({ success: true, data: rows, source: 'dashboard_test' });
     } catch (error) {
@@ -33,47 +89,30 @@ router.get('/model-consumption', async (req, res, next) => {
 
 router.get('/hierarchy', async (req, res, next) => {
     try {
-        const { campus, faculty, department } = req.query;
+        const filter = usageFilter(req);
         const { rows } = await dashboardPool.query(
             `SELECT
-                CASE
-                    WHEN o.org_level = 'campus' THEN o.name_en
-                    WHEN p1.org_level = 'campus' THEN p1.name_en
-                    WHEN p2.org_level = 'campus' THEN p2.name_en
-                    ELSE 'Unknown'
-                END AS campus,
-                CASE
-                    WHEN o.org_level = 'faculty' THEN o.name_en
-                    WHEN p1.org_level = 'faculty' THEN p1.name_en
-                    ELSE 'Unknown'
-                END AS faculty,
-                CASE WHEN o.org_level IN ('department', 'unit') THEN o.name_en ELSE 'Unknown' END AS department,
-                SUM(f.total_tokens)::bigint AS "tokensUsed",
-                SUM(COALESCE(f.total_coins, 0)) AS "coinConsumption"
-             FROM fact_usage_event f
-             JOIN dim_org_unit o ON o.org_unit_key = f.org_unit_key
-             LEFT JOIN dim_org_unit p1 ON p1.org_unit_key = o.parent_org_unit_key
-             LEFT JOIN dim_org_unit p2 ON p2.org_unit_key = p1.parent_org_unit_key
-             GROUP BY 1,2,3
-             HAVING ($1::text IS NULL OR $1 = 'All' OR
-                        CASE
-                            WHEN o.org_level = 'campus' THEN o.name_en
-                            WHEN p1.org_level = 'campus' THEN p1.name_en
-                            WHEN p2.org_level = 'campus' THEN p2.name_en
-                            ELSE 'Unknown'
-                        END = $1)
-                AND ($2::text IS NULL OR $2 = 'All' OR
-                        CASE
-                            WHEN o.org_level = 'faculty' THEN o.name_en
-                            WHEN p1.org_level = 'faculty' THEN p1.name_en
-                            ELSE 'Unknown'
-                        END = $2)
-                AND ($3::text IS NULL OR $3 = 'All' OR
-                        CASE WHEN o.org_level IN ('department', 'unit') THEN o.name_en ELSE 'Unknown' END = $3)
+                campus, faculty, department,
+                SUM(total_tokens)::bigint AS "tokensUsed",
+                SUM(COALESCE(total_coins, 0)) AS "coinConsumption"
+             FROM ${usageSource} u
+             WHERE org_unit_key IS NOT NULL AND ${filter.sql}
+             GROUP BY campus, faculty, department
              ORDER BY "tokensUsed" DESC`,
-            [campus || null, faculty || null, department || null]
+            filter.params
         );
-        res.json({ success: true, data: rows, source: 'dashboard_test' });
+        const unmapped = await dashboardPool.query(
+            `SELECT COUNT(*)::int AS count
+             FROM ${usageSource} u
+             WHERE org_unit_key IS NULL AND ${filter.sql}`,
+            filter.params
+        );
+        res.json({
+            success: true,
+            data: rows,
+            meta: { unmappedUsage: unmapped.rows[0].count },
+            source: 'dashboard_test',
+        });
     } catch (error) {
         next(error);
     }
@@ -81,20 +120,14 @@ router.get('/hierarchy', async (req, res, next) => {
 
 router.get('/costs', async (req, res, next) => {
     try {
+        const filter = usageFilter(req);
         const { rows } = await dashboardPool.query(
-            `WITH anchor AS (
-                SELECT MAX(event_at) AS data_as_of FROM fact_usage_event
-             ), coin_usage AS (
+            `WITH coin_usage AS (
                 SELECT
-                    data_as_of,
-                    SUM(COALESCE(total_coins, 0)) FILTER (
-                        WHERE DATE_TRUNC('month', event_at) = DATE_TRUNC('month', data_as_of)
-                    ) AS current_coins,
-                    SUM(COALESCE(total_coins, 0)) FILTER (
-                        WHERE DATE_TRUNC('month', event_at) = DATE_TRUNC('month', data_as_of - INTERVAL '1 month')
-                    ) AS previous_coins
-                FROM fact_usage_event CROSS JOIN anchor
-                GROUP BY data_as_of
+                    MAX(event_at) AS data_as_of,
+                    SUM(COALESCE(total_coins, 0)) AS current_coins
+                FROM ${usageSource} u
+                WHERE ${filter.sql}
              )
              SELECT
                 current_coins AS "currentBillingCycle",
@@ -104,11 +137,12 @@ router.get('/costs', async (req, res, next) => {
                          * EXTRACT(DAY FROM (DATE_TRUNC('month', data_as_of) + INTERVAL '1 month - 1 day'))
                     ELSE 0
                 END AS "projectedEndOfMonth",
-                current_coins - previous_coins AS "usageChange",
+                0::numeric AS "usageChange",
                 NULL::numeric AS "cachingSavings",
                 'Coin' AS unit,
                 data_as_of AS "dataAsOf"
-             FROM coin_usage`
+             FROM coin_usage`,
+            filter.params
         );
         res.json({ success: true, data: rows[0] || {}, source: 'dashboard_test' });
     } catch (error) {

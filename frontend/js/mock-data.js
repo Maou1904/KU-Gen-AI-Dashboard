@@ -19,9 +19,40 @@ const MockData = {
         'Faculty of Engineering at Sriracha': ['All', 'Automation Engineering', 'AI Manufacturing Lab'],
     },
 
-    getDashboardData(scope = 'Overview', period = 'Month') {
-        const scopeFactor = { Overview: 1, Faculty: 1.08, Department: 0.92 }[scope] || 1;
-        const periodFactor = { '7 Days': 0.32, Month: 1, Year: 8.8, Custom: 1.45 }[period] || 1;
+    getDateFactor(date = {}) {
+        if (typeof date === 'string') {
+            return { '7 Days': 0.32, Month: 1, Year: 11.4, Custom: 1.45 }[date] || 1;
+        }
+        if (date.mode === 'year') return 11.4;
+        if (date.mode === 'custom' && date.range?.length === 2) {
+            const days = Math.max(1, (new Date(date.range[1]) - new Date(date.range[0])) / 86400000 + 1);
+            return Math.max(0.1, days / 30);
+        }
+        return 1;
+    },
+
+    matchesHierarchy(row, hierarchy = {}) {
+        const campuses = hierarchy.campuses || [];
+        const faculties = hierarchy.faculties || [];
+        const departments = hierarchy.departments || [];
+        return (!campuses.length || campuses.includes(row.campus))
+            && (!faculties.length || faculties.includes(row.faculty))
+            && (!departments.length || departments.includes(row.department));
+    },
+
+    getHierarchyShare(hierarchy = {}) {
+        const allRows = this.getHierarchyData();
+        const selectedRows = allRows.filter(row => this.matchesHierarchy(row, hierarchy));
+        const allTokens = allRows.reduce((sum, row) => sum + row.tokensUsed, 0);
+        const selectedTokens = selectedRows.reduce((sum, row) => sum + row.tokensUsed, 0);
+        return allTokens ? selectedTokens / allTokens : 1;
+    },
+
+    getDashboardData(filter = {}, legacyPeriod = null) {
+        const hierarchy = typeof filter === 'string' ? {} : filter.hierarchy || {};
+        const date = typeof filter === 'string' ? legacyPeriod || 'Month' : filter.date || {};
+        const scopeFactor = Math.max(0.08, this.getHierarchyShare(hierarchy));
+        const periodFactor = this.getDateFactor(date);
         const users = Math.round(1248 * scopeFactor * Math.min(periodFactor, 2.4));
         const tokens = 4.2 * scopeFactor * periodFactor;
         const cost = Math.round(8450 * scopeFactor * periodFactor);
@@ -34,13 +65,13 @@ const MockData = {
                 { label: 'COIN CONSUMPTION', value: `${cost.toLocaleString()} Coin`, change: 'Steady from last month', icon: 'toll', type: 'neutral' },
                 { label: 'TOTAL TRANSACTIONS', value: `${transactions.toFixed(1)}k`, change: '+15.1% from last month', icon: 'forum', type: 'positive' },
             ],
-            monthly: this.getMonthlyUsageData(period, scopeFactor),
-            topics: this.getTrendingTopics(scope),
+            monthly: this.getMonthlyUsageData(date, scopeFactor),
+            topics: this.getTrendingTopics(hierarchy.departments?.length ? 'Department' : hierarchy.faculties?.length ? 'Faculty' : 'Overview'),
         };
     },
 
-    getMonthlyUsageData(period = 'Month', factor = 1) {
-        const periodFactor = { '7 Days': 0.24, Month: 1, Year: 9, Custom: 1.35 }[period] || 1;
+    getMonthlyUsageData(date = {}, factor = 1) {
+        const periodFactor = this.getDateFactor(date);
         const base = [2500, 3200, 4100, 3800, 4500, 5200];
         return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'].map((month, index) => ({
             month,
@@ -58,13 +89,57 @@ const MockData = {
         return (topicSets[scope] || topicSets.Overview).map(tag => ({ tag }));
     },
 
-    getModelTokenConsumption() {
+    getAppTokenConsumption() {
         return [
-            { modelName: 'GPT-4o', tokens: '45.2M', percentage: 45.2, color: '#0d631b' },
-            { modelName: 'Claude 3.5 Sonnet', tokens: '28.9M', percentage: 28.9, color: '#2f74c7' },
-            { modelName: 'Llama 3 70B', tokens: '12.5M', percentage: 12.5, color: '#c4d1c4' },
-            { modelName: 'Other Models', tokens: '13.4M', percentage: 13.4, color: '#dce6dc' },
+            { id: 'research', appName: 'Research Assistant AI', tokens: 34.2, percentage: 34.2, color: '#0d631b' },
+            { id: 'grant', appName: 'Grant Writer Pro', tokens: 24.8, percentage: 24.8, color: '#0054a7' },
+            { id: 'syllabus', appName: 'Syllabus Generator', tokens: 18.4, percentage: 18.4, color: '#78a47d' },
+            { id: 'insight', appName: 'Data Insight Lab', tokens: 13.6, percentage: 13.6, color: '#94a89a' },
+            { id: 'other', appName: 'Other Apps', tokens: 9, percentage: 9, color: '#dce6dc' },
         ];
+    },
+
+    getModelsForApp(appId) {
+        const models = {
+            research: [
+                ['GPT-4o', 18.4, '#0d631b'],
+                ['Claude 3.5 Sonnet', 10.2, '#0054a7'],
+                ['Llama 3 70B', 5.6, '#94a89a'],
+            ],
+            grant: [
+                ['Claude 3.5 Sonnet', 13.1, '#0054a7'],
+                ['GPT-4o', 8.7, '#0d631b'],
+                ['Gemini 1.5 Pro', 3, '#78a47d'],
+            ],
+            syllabus: [
+                ['GPT-4o mini', 10.3, '#0d631b'],
+                ['Llama 3 70B', 5.1, '#94a89a'],
+                ['Claude 3 Haiku', 3, '#0054a7'],
+            ],
+            insight: [
+                ['GPT-4o', 7.2, '#0d631b'],
+                ['Gemini 1.5 Pro', 4.6, '#78a47d'],
+                ['Llama 3 70B', 1.8, '#94a89a'],
+            ],
+            other: [
+                ['GPT-4o mini', 3.8, '#0d631b'],
+                ['Claude 3 Haiku', 2.9, '#0054a7'],
+                ['Other Models', 2.3, '#dce6dc'],
+            ],
+        };
+        const rows = models[appId] || [];
+        const total = rows.reduce((sum, row) => sum + row[1], 0);
+        return rows.map(([modelName, tokenValue, color]) => ({
+            modelName,
+            tokenValue,
+            tokens: `${tokenValue.toFixed(1)}M`,
+            percentage: Number((tokenValue * 100 / total).toFixed(1)),
+            color,
+        }));
+    },
+
+    getModelTokenConsumption() {
+        return this.getModelsForApp('research');
     },
 
     getHierarchyData(filters = {}) {
@@ -76,24 +151,30 @@ const MockData = {
             { campus: 'Bangkhen', faculty: 'Faculty of Science', department: 'Computer Science', tokensUsed: 15400000 },
             { campus: 'Bangkhen', faculty: 'Faculty of Science', department: 'Statistics', tokensUsed: 7100000 },
             { campus: 'Bangkhen', faculty: 'Faculty of Business Administration', department: 'Business Analytics', tokensUsed: 5800000 },
+            { campus: 'Bangkhen', faculty: 'Faculty of Business Administration', department: 'Marketing', tokensUsed: 4200000 },
             { campus: 'Bangkhen', faculty: 'Library Services', department: 'Digital Archives', tokensUsed: 3100000 },
+            { campus: 'Bangkhen', faculty: 'Library Services', department: 'Learning Innovation', tokensUsed: 2700000 },
             { campus: 'Kamphaeng Saen', faculty: 'Faculty of Agriculture', department: 'Smart Farming Lab', tokensUsed: 9850000 },
             { campus: 'Kamphaeng Saen', faculty: 'Faculty of Agriculture', department: 'Crop Science', tokensUsed: 6900000 },
             { campus: 'Kamphaeng Saen', faculty: 'Faculty of Education and Development Sciences', department: 'EdTech Research', tokensUsed: 4200000 },
+            { campus: 'Kamphaeng Saen', faculty: 'Faculty of Education and Development Sciences', department: 'Curriculum Innovation', tokensUsed: 3600000 },
             { campus: 'Siriracha', faculty: 'Faculty of Management Sciences', department: 'FinTech Research', tokensUsed: 6400000 },
             { campus: 'Siriracha', faculty: 'Faculty of Management Sciences', department: 'Logistics Analytics', tokensUsed: 5100000 },
             { campus: 'Siriracha', faculty: 'Faculty of Engineering at Sriracha', department: 'AI Manufacturing Lab', tokensUsed: 7300000 },
+            { campus: 'Siriracha', faculty: 'Faculty of Engineering at Sriracha', department: 'Automation Engineering', tokensUsed: 4800000 },
         ];
 
         return rows.filter(row => {
-            const campusOk = !filters.campus || filters.campus === 'All' || row.campus === filters.campus;
-            const facultyOk = !filters.faculty || filters.faculty === 'All' || row.faculty === filters.faculty;
-            const departmentOk = !filters.department || filters.department === 'All' || row.department === filters.department;
-            return campusOk && facultyOk && departmentOk;
+            if (filters.campus || filters.faculty || filters.department) {
+                return (!filters.campus || filters.campus === 'All' || row.campus === filters.campus)
+                    && (!filters.faculty || filters.faculty === 'All' || row.faculty === filters.faculty)
+                    && (!filters.department || filters.department === 'All' || row.department === filters.department);
+            }
+            return this.matchesHierarchy(row, filters);
         });
     },
 
-    getMonthlyTokensByYears(compareYears = 1) {
+    getMonthlyTokensByYears(selectedYears = ['2026']) {
         const allYears = [
             { year: '2026', values: [3100, 4300, 6900, 6700, 7600, 8200, 9100, 9800, 10400, 11200, 12100, 12800], color: '#0d631b' },
             { year: '2025', values: [2300, 3600, 4200, 4100, 5200, 5700, 6100, 6600, 7200, 7600, 8200, 8800], color: '#0054a7' },
@@ -104,53 +185,63 @@ const MockData = {
 
         return {
             labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-            series: allYears.slice(0, Number(compareYears) || 1),
+            series: allYears.filter(item => (
+                Array.isArray(selectedYears)
+                    ? selectedYears.includes(item.year)
+                    : allYears.slice(0, Number(selectedYears) || 1).includes(item)
+            )),
+            years: allYears.map(item => item.year),
         };
     },
 
-    getAnalyticsDepartments(scope = 'Overview', period = 'Month') {
-        const periodFactor = { '7 Days': 0.28, Month: 1, Year: 11.4 }[period] || 1;
+    getAnalyticsDepartments(filter = {}, legacyPeriod = null) {
+        const hierarchy = typeof filter === 'string' ? {} : filter.hierarchy || {};
+        const date = typeof filter === 'string' ? legacyPeriod || 'Month' : filter.date || {};
+        const periodFactor = this.getDateFactor(date);
         const all = [
-            ['Computer Science', 'Faculty of Science', 45210, 6412.50],
-            ['Computer Engineering', 'Faculty of Engineering', 43880, 6120.75],
-            ['Data Science Institute', 'Faculty of Science', 38940, 5488.10],
-            ['Smart Farming Lab', 'Faculty of Agriculture', 31820, 4210.40],
-            ['FinTech Research', 'Faculty of Management Sciences', 28470, 3990.00],
-            ['Business Analytics', 'Faculty of Business Administration', 25110, 3524.80],
-            ['AI Manufacturing Lab', 'Faculty of Engineering at Sriracha', 22900, 3194.50],
-            ['Digital Archives', 'Library Services', 20350, 2862.70],
-            ['Statistics', 'Faculty of Science', 18120, 2536.80],
-            ['EdTech Research', 'Faculty of Education and Development Sciences', 16240, 2270.00],
-            ['Crop Science', 'Faculty of Agriculture', 14890, 2086.30],
-            ['Logistics Analytics', 'Faculty of Management Sciences', 13220, 1850.80],
-            ['Electrical Engineering', 'Faculty of Engineering', 12840, 1797.60],
-            ['Marketing', 'Faculty of Business Administration', 10950, 1533.00],
-            ['Learning Innovation', 'Library Services', 9680, 1355.20],
-            ['Curriculum Innovation', 'Faculty of Education and Development Sciences', 8420, 1178.80],
-            ['Industrial Engineering', 'Faculty of Engineering', 7890, 1104.60],
-            ['Automation Engineering', 'Faculty of Engineering at Sriracha', 7240, 1013.60],
+            ['Bangkhen', 'Computer Science', 'Faculty of Science', 45210, 6412.50],
+            ['Bangkhen', 'Computer Engineering', 'Faculty of Engineering', 43880, 6120.75],
+            ['Bangkhen', 'Data Science Institute', 'Faculty of Science', 38940, 5488.10],
+            ['Kamphaeng Saen', 'Smart Farming Lab', 'Faculty of Agriculture', 31820, 4210.40],
+            ['Siriracha', 'FinTech Research', 'Faculty of Management Sciences', 28470, 3990.00],
+            ['Bangkhen', 'Business Analytics', 'Faculty of Business Administration', 25110, 3524.80],
+            ['Siriracha', 'AI Manufacturing Lab', 'Faculty of Engineering at Sriracha', 22900, 3194.50],
+            ['Bangkhen', 'Digital Archives', 'Library Services', 20350, 2862.70],
+            ['Bangkhen', 'Statistics', 'Faculty of Science', 18120, 2536.80],
+            ['Kamphaeng Saen', 'EdTech Research', 'Faculty of Education and Development Sciences', 16240, 2270.00],
+            ['Kamphaeng Saen', 'Crop Science', 'Faculty of Agriculture', 14890, 2086.30],
+            ['Siriracha', 'Logistics Analytics', 'Faculty of Management Sciences', 13220, 1850.80],
+            ['Bangkhen', 'Electrical Engineering', 'Faculty of Engineering', 12840, 1797.60],
+            ['Bangkhen', 'Marketing', 'Faculty of Business Administration', 10950, 1533.00],
+            ['Bangkhen', 'Learning Innovation', 'Library Services', 9680, 1355.20],
+            ['Kamphaeng Saen', 'Curriculum Innovation', 'Faculty of Education and Development Sciences', 8420, 1178.80],
+            ['Bangkhen', 'Industrial Engineering', 'Faculty of Engineering', 7890, 1104.60],
+            ['Siriracha', 'Automation Engineering', 'Faculty of Engineering at Sriracha', 7240, 1013.60],
         ];
 
-        const filtered = scope === 'Overview' ? all : all.filter(row => scope === 'Faculty' ? row[1].includes('Science') || row[1].includes('Engineering') : true);
-        return filtered.map(([name, faculty, tokens, cost]) => ({
+        return all.map(([campus, name, faculty, tokens, cost]) => ({
+            campus,
             name,
             faculty,
+            department: name,
             totalModelsUsed: Math.round(tokens * periodFactor),
             coinConsumption: Number((cost * periodFactor).toFixed(2)),
-        }));
+        })).filter(row => this.matchesHierarchy(row, hierarchy));
     },
 
-    getBehaviorData(period = '7 Days') {
-        const factor = { '7 Days': 1, Month: 3.4, Year: 14 }[period] || 1;
+    getBehaviorData(filter = {}) {
+        const date = typeof filter === 'string' ? filter : filter.date || {};
+        const hierarchy = typeof filter === 'string' ? {} : filter.hierarchy || {};
+        const factor = this.getDateFactor(date) * Math.max(0.08, this.getHierarchyShare(hierarchy));
         const baseUsers = [1100, 1400, 2400, 2000, 3700, 3300, 4300, 3950, 5150, 5842];
         return {
             totalNotes: Math.round(142853 * factor),
-            change: period === '7 Days' ? '+12.4%' : period === 'Month' ? '+18.1%' : '+31.7%',
+            change: factor > 2 ? '+31.7%' : factor > 1 ? '+18.1%' : '+12.4%',
             activeUsers: baseUsers.map((users, index) => ({
                 day: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue', 'Wed'][index],
                 users: Math.round(users * Math.min(factor, 2.2)),
             })),
-            tags: this.getPopularTags(period),
+            tags: this.getPopularTags(typeof date === 'string' ? date : date.mode === 'year' ? 'Year' : 'Month'),
         };
     },
 

@@ -2,15 +2,49 @@
 const App = {
     currentPage: 'dashboard',
     apiConnected: false,
+    currentDataMode: 'checking',
+    openDropdown: null,
+    liveData: {},
     state: {
-        dashboard: { scope: 'Faculty', period: 'Month' },
-        consumption: {
-            period: 'Month',
-            compareYears: 1,
-            hierarchy: { campus: 'All', faculty: 'All', department: 'All' },
+        dashboard: {
+            filter: {
+                hierarchy: { campuses: [], faculties: [], departments: [] },
+                date: { mode: 'month', month: 6, year: 2026, range: [] },
+            },
         },
-        analytics: { scope: 'Overview', period: 'Month', page: 1, pageSize: 7 },
-        behavior: { period: '7 Days' },
+        consumption: {
+            filter: {
+                hierarchy: { campuses: [], faculties: [], departments: [] },
+                date: { mode: 'month', month: 6, year: 2026, range: [] },
+            },
+            selectedYears: ['2026'],
+            drilldownApp: null,
+            hierarchyPage: 1,
+            hierarchyPageSize: 7,
+        },
+        analytics: {
+            filter: {
+                hierarchy: { campuses: [], faculties: [], departments: [] },
+                date: { mode: 'month', month: 6, year: 2026, range: [] },
+            },
+            page: 1,
+            pageSize: 7,
+        },
+        behavior: {
+            filter: {
+                hierarchy: { campuses: [], faculties: [], departments: [] },
+                date: { mode: 'month', month: 6, year: 2026, range: [] },
+            },
+        },
+        settings: {
+            theme: 'forest',
+            compactTables: false,
+            schedule: null,
+            scheduleLoading: false,
+            scheduleAttempted: false,
+            message: '',
+            messageType: 'neutral',
+        },
     },
 
     async init() {
@@ -18,12 +52,19 @@ const App = {
         window.addEventListener('hashchange', () => this.router());
         document.addEventListener('click', (event) => this.handleClick(event));
         document.addEventListener('change', (event) => this.handleChange(event));
+        document.body.dataset.theme = this.state.settings.theme;
         this.router();
     },
 
     async checkAPIHealth() {
         const response = await API.healthCheck();
         this.apiConnected = response !== null;
+        if (this.apiConnected) {
+            const context = await API.getDashboardMetrics();
+            const dataAsOf = context?.dataAsOf;
+            ['dashboard', 'consumption', 'analytics', 'behavior']
+                .forEach(page => this.applyLiveDataAsOf(page, dataAsOf));
+        }
         this.updateAPIStatus();
     },
 
@@ -32,14 +73,14 @@ const App = {
         const statusText = document.getElementById('api-status-text');
         if (!statusEl || !statusText) return;
 
-        if (this.apiConnected) {
+        if (this.apiConnected && this.currentDataMode !== 'unavailable') {
             statusEl.classList.remove('disconnected');
             statusEl.classList.add('connected');
-            statusText.textContent = 'Backend Connected';
+            statusText.textContent = this.currentDataMode === 'live' ? 'Live Database' : 'Backend Connected';
         } else {
             statusEl.classList.remove('connected');
             statusEl.classList.add('disconnected');
-            statusText.textContent = 'Using Mock Data';
+            statusText.textContent = 'Database Unavailable';
         }
     },
 
@@ -72,50 +113,143 @@ const App = {
             return;
         }
 
-        const filterTab = event.target.closest('.filter-tab[data-page]');
-        if (filterTab) {
-            const { page, group, value } = filterTab.dataset;
-            this.state[page][group] = value;
-            if (page === 'analytics') this.state.analytics.page = 1;
-            this.render(this.currentPage);
+        const dropdownToggle = event.target.closest('[data-dropdown-toggle]');
+        if (dropdownToggle) {
+            const dropdownId = dropdownToggle.dataset.dropdownToggle;
+            this.openDropdown = this.openDropdown === dropdownId ? null : dropdownId;
+            document.querySelectorAll('.filter-popover').forEach(popover => {
+                popover.hidden = popover.id !== this.openDropdown;
+            });
             return;
         }
 
         const pageButton = event.target.closest('.pagination-btn[data-page-number]');
         if (pageButton && !pageButton.disabled) {
-            this.state.analytics.page = Number(pageButton.dataset.pageNumber);
-            this.render('department');
+            const target = pageButton.dataset.paginationTarget || 'analytics';
+            if (target === 'analytics') this.state.analytics.page = Number(pageButton.dataset.pageNumber);
+            if (target === 'consumption') this.state.consumption.hierarchyPage = Number(pageButton.dataset.pageNumber);
+            this.render(target === 'analytics' ? 'department' : 'api');
+            return;
         }
-    },
 
-    handleChange(event) {
-        const compareSelect = event.target.closest('#compare-years');
-        if (compareSelect) {
-            this.state.consumption.compareYears = Number(compareSelect.value);
+        const clearHierarchy = event.target.closest('[data-clear-hierarchy]');
+        if (clearHierarchy) {
+            const page = clearHierarchy.dataset.clearHierarchy;
+            this.state[page].filter.hierarchy = { campuses: [], faculties: [], departments: [] };
+            this.resetPage(page);
+            this.render(this.currentPage);
+            return;
+        }
+
+        const appDrilldown = event.target.closest('[data-app-drilldown]');
+        if (appDrilldown) {
+            this.state.consumption.drilldownApp = appDrilldown.dataset.appDrilldown;
             this.render('api');
             return;
         }
 
-        const hierarchySelect = event.target.closest('.hierarchy-filter');
-        if (hierarchySelect) {
-            const key = hierarchySelect.dataset.hierarchy;
-            this.state.consumption.hierarchy[key] = hierarchySelect.value;
-
-            if (key === 'campus') {
-                this.state.consumption.hierarchy.faculty = 'All';
-                this.state.consumption.hierarchy.department = 'All';
-            }
-            if (key === 'faculty') {
-                this.state.consumption.hierarchy.department = 'All';
-            }
-
+        if (event.target.closest('[data-app-back]')) {
+            this.state.consumption.drilldownApp = null;
             this.render('api');
+            return;
+        }
+
+        if (event.target.closest('#export-analytics')) {
+            this.exportAnalytics();
+            return;
+        }
+
+        const themeButton = event.target.closest('[data-theme-value]');
+        if (themeButton) {
+            this.state.settings.theme = themeButton.dataset.themeValue;
+            document.body.dataset.theme = this.state.settings.theme;
+            this.render('settings');
+            return;
+        }
+
+        if (event.target.closest('#schedule-refresh')) {
+            this.loadSchedule(true);
+            return;
+        }
+        if (event.target.closest('#schedule-save')) {
+            this.saveSchedule();
+            return;
+        }
+        if (event.target.closest('#schedule-run')) {
+            this.runSyncNow();
+            return;
+        }
+
+        if (!event.target.closest('.filter-dropdown')) {
+            this.openDropdown = null;
+            document.querySelectorAll('.filter-popover').forEach(popover => {
+                popover.hidden = true;
+            });
+        }
+    },
+
+    handleChange(event) {
+        const hierarchyCheckbox = event.target.closest('[data-hierarchy-level]');
+        if (hierarchyCheckbox) {
+            const { filterPage, hierarchyLevel, filterValue } = hierarchyCheckbox.dataset;
+            const hierarchy = this.state[filterPage].filter.hierarchy;
+            const values = hierarchy[hierarchyLevel];
+            if (hierarchyCheckbox.checked) values.push(filterValue);
+            else hierarchy[hierarchyLevel] = values.filter(value => value !== filterValue);
+            this.pruneHierarchy(filterPage, hierarchyLevel);
+            this.resetPage(filterPage);
+            this.openDropdown = `hierarchy-${filterPage}`;
+            this.render(this.currentPage);
+            return;
+        }
+
+        const dateSelect = event.target.closest('[data-date-field]');
+        if (dateSelect) {
+            const { filterPage, dateField } = dateSelect.dataset;
+            const date = this.state[filterPage].filter.date;
+            date[dateField] = dateField === 'month' || dateField === 'year'
+                ? Number(dateSelect.value)
+                : dateSelect.value;
+            if (dateField !== 'mode') date.mode = date.mode === 'custom' ? 'month' : date.mode;
+            date.range = [];
+            this.resetPage(filterPage);
+            this.render(this.currentPage);
+            return;
+        }
+
+        const yearCheckbox = event.target.closest('[data-compare-year]');
+        if (yearCheckbox) {
+            const year = yearCheckbox.dataset.compareYear;
+            const selected = this.state.consumption.selectedYears;
+            if (yearCheckbox.checked) selected.push(year);
+            else this.state.consumption.selectedYears = selected.filter(value => value !== year);
+            if (!this.state.consumption.selectedYears.length) {
+                this.state.consumption.selectedYears = [year];
+            }
+            this.openDropdown = 'compare-years';
+            this.render('api');
+            return;
+        }
+
+        if (event.target.matches('#compact-tables')) {
+            this.state.settings.compactTables = event.target.checked;
+            document.body.classList.toggle('compact-tables', event.target.checked);
         }
     },
 
     async render(page) {
         const container = document.getElementById('page-container');
         container.innerHTML = '<div class="flex items-center justify-center h-full"><span class="text-on-surface-variant">Loading...</span></div>';
+
+        if (page !== 'settings') {
+            if (this.apiConnected) await this.loadLivePageData(page);
+            if (!this.liveData[page]) {
+                this.currentDataMode = 'unavailable';
+                this.updateAPIStatus();
+                container.innerHTML = this.createDataUnavailablePage();
+                return;
+            }
+        }
 
         let content = '';
         switch (page) {
@@ -139,7 +273,159 @@ const App = {
         }
 
         container.innerHTML = content;
-        setTimeout(() => this.initCharts(page), 50);
+        setTimeout(() => {
+            this.initCharts(page);
+            this.initDatePickers();
+        }, 50);
+        if (page === 'settings'
+            && !this.state.settings.schedule
+            && !this.state.settings.scheduleLoading
+            && !this.state.settings.scheduleAttempted) {
+            this.loadSchedule();
+        }
+    },
+
+    async loadLivePageData(page) {
+        const successful = response => response?.success ? response.data : null;
+        let data = null;
+        const statePage = page === 'api' ? 'consumption'
+            : page === 'department' ? 'analytics'
+                : page;
+        const query = this.buildApiQuery(statePage);
+
+        if (!this.liveHierarchy) {
+            const hierarchy = await API.getHierarchyData();
+            this.liveHierarchy = successful(hierarchy);
+        }
+
+        if (page === 'dashboard') {
+            const [metrics, monthly, topics] = await Promise.all([
+                API.getDashboardMetrics(query),
+                API.getMonthlyUsage(query),
+                API.getTrendingTopics(query),
+            ]);
+            if (metrics && monthly && topics) {
+                this.applyLiveDataAsOf('dashboard', metrics.dataAsOf);
+                data = {
+                    metrics: successful(metrics),
+                    monthly: successful(monthly),
+                    topics: successful(topics),
+                };
+            }
+        }
+
+        if (page === 'api') {
+            const family = this.state.consumption.drilldownApp;
+            const [providers, models, hierarchy, costs, monthly] = await Promise.all([
+                API.getProviderConsumption(query),
+                API.getModelConsumption(`${query}${query ? '&' : '?'}${family ? `family=${encodeURIComponent(family)}` : ''}`.replace(/[?&]$/, '')),
+                API.getHierarchyData(query),
+                API.getCosts(query),
+                API.getMonthlyUsage(),
+            ]);
+            if (providers && models && hierarchy && costs && monthly) {
+                this.applyLiveDataAsOf('consumption', costs.data?.dataAsOf);
+                data = {
+                    providers: successful(providers),
+                    models: successful(models),
+                    hierarchy: successful(hierarchy),
+                    hierarchyMeta: hierarchy.meta || {},
+                    costs: successful(costs),
+                    monthly: successful(monthly),
+                };
+            }
+        }
+
+        if (page === 'department') {
+            const [summary, kpis, heatmap] = await Promise.all([
+                API.getDepartmentSummary(query),
+                API.getDepartmentKPIs(query),
+                API.getHeatmapData(query),
+            ]);
+            if (summary && kpis && heatmap) {
+                this.applyLiveDataAsOf('analytics', kpis.data?.dataAsOf);
+                data = {
+                    departments: successful(summary),
+                    departmentMeta: summary.meta || {},
+                    kpis: successful(kpis),
+                    heatmap: successful(heatmap),
+                };
+            }
+        }
+
+        if (page === 'behavior') {
+            const [dailyUsers, tags, apps, kpi] = await Promise.all([
+                API.getDailyUsers(query),
+                API.getTrendingTags(query),
+                API.getAppDistribution(query),
+                API.getBehaviorKPI(query),
+            ]);
+            if (dailyUsers && tags && apps && kpi) {
+                this.applyLiveDataAsOf('behavior', kpi.data?.dataAsOf);
+                data = {
+                    dailyUsers: successful(dailyUsers),
+                    tags: successful(tags),
+                    apps: successful(apps),
+                    kpi: successful(kpi),
+                };
+            }
+        }
+
+        this.liveData[page] = data;
+        this.currentDataMode = data ? 'live' : 'unavailable';
+        this.updateAPIStatus();
+    },
+
+    buildApiQuery(page) {
+        const filter = this.state[page]?.filter;
+        if (!filter) return '';
+        const params = new URLSearchParams();
+        const date = filter.date;
+        let start;
+        let end;
+        if (date.mode === 'custom' && date.range.length === 2) {
+            [start, end] = date.range;
+        } else if (date.mode === 'year') {
+            start = `${date.year}-01-01`;
+            end = `${date.year}-12-31`;
+        } else {
+            const lastDay = new Date(date.year, date.month, 0).getDate();
+            start = `${date.year}-${String(date.month).padStart(2, '0')}-01`;
+            end = `${date.year}-${String(date.month).padStart(2, '0')}-${lastDay}`;
+        }
+        params.set('start', start);
+        params.set('end', end);
+        const hierarchy = filter.hierarchy;
+        if (hierarchy.campuses.length) params.set('campuses', hierarchy.campuses.join(','));
+        if (hierarchy.faculties.length) params.set('faculties', hierarchy.faculties.join(','));
+        if (hierarchy.departments.length) params.set('departments', hierarchy.departments.join(','));
+        return `?${params.toString()}`;
+    },
+
+    applyLiveDataAsOf(page, value) {
+        if (!value || this.state[page].liveDateInitialized) return;
+        const dataAsOf = new Date(value);
+        if (Number.isNaN(dataAsOf.getTime())) return;
+        this.state[page].filter.date.month = dataAsOf.getMonth() + 1;
+        this.state[page].filter.date.year = dataAsOf.getFullYear();
+        this.state[page].liveDateInitialized = true;
+    },
+
+    createDataUnavailablePage() {
+        return `
+            <div class="min-h-[420px] flex items-center justify-center">
+                <div class="max-w-md text-center">
+                    <span class="material-symbols-outlined text-error text-[40px]">database_off</span>
+                    <h2 class="font-headline-lg text-headline-lg text-on-surface mt-md">Database unavailable</h2>
+                    <p class="font-body-md text-body-md text-on-surface-variant mt-sm">
+                        This page only displays live dashboard data. Start the backend and refresh the page.
+                    </p>
+                    <button type="button" class="mt-lg px-lg py-sm rounded bg-primary text-on-primary font-label-md" onclick="window.location.reload()">
+                        Retry
+                    </button>
+                </div>
+            </div>
+        `;
     },
 
     createKPICard(label, value, change, icon, type = 'neutral') {
@@ -185,14 +471,14 @@ const App = {
         }).join('');
     },
 
-    createPageHeader(title, subtitle, filters = '') {
+    createPageHeader(title, subtitle, controls = '') {
         return `
-            <div class="flex justify-between items-end mb-gutter">
-                <div>
+            <div class="page-header mb-gutter">
+                <div class="page-header-copy">
                     <h2 class="font-headline-lg text-headline-lg text-on-surface mb-xs">${title}</h2>
                     <p class="font-body-md text-body-md text-on-surface-variant">${subtitle}</p>
                 </div>
-                ${filters}
+                ${controls ? `<div class="page-header-controls">${controls}</div>` : ''}
             </div>
         `;
     },
@@ -208,17 +494,235 @@ const App = {
         `;
     },
 
+    resetPage(page) {
+        if (page === 'analytics') this.state.analytics.page = 1;
+        if (page === 'consumption') this.state.consumption.hierarchyPage = 1;
+    },
+
+    getHierarchyOptions(page) {
+        const hierarchy = this.state[page].filter.hierarchy;
+        const rows = this.liveHierarchy || [];
+        const campuses = [...new Set(rows.map(row => row.campus).filter(Boolean))];
+        const faculties = [...new Set(rows
+            .filter(row => !hierarchy.campuses.length || hierarchy.campuses.includes(row.campus))
+            .map(row => row.faculty).filter(Boolean))];
+        const departments = [...new Set(rows
+            .filter(row => (!hierarchy.campuses.length || hierarchy.campuses.includes(row.campus))
+                && (!hierarchy.faculties.length || hierarchy.faculties.includes(row.faculty)))
+            .map(row => row.department).filter(Boolean))];
+        return { campuses, faculties, departments };
+    },
+
+    pruneHierarchy(page, changedLevel) {
+        const hierarchy = this.state[page].filter.hierarchy;
+        const options = this.getHierarchyOptions(page);
+        if (changedLevel === 'campuses') {
+            hierarchy.faculties = hierarchy.faculties.filter(value => options.faculties.includes(value));
+        }
+        const refreshed = this.getHierarchyOptions(page);
+        if (changedLevel === 'campuses' || changedLevel === 'faculties') {
+            hierarchy.departments = hierarchy.departments.filter(value => refreshed.departments.includes(value));
+        }
+    },
+
+    getHierarchySummary(page) {
+        const hierarchy = this.state[page].filter.hierarchy;
+        const selected = [
+            ...hierarchy.campuses,
+            ...hierarchy.faculties,
+            ...hierarchy.departments,
+        ];
+        if (!selected.length) return 'All hierarchy';
+        if (selected.length === 1) return selected[0];
+        return `${selected.length} hierarchy selections`;
+    },
+
+    createHierarchyDropdown(page) {
+        const hierarchy = this.state[page].filter.hierarchy;
+        const options = this.getHierarchyOptions(page);
+        const dropdownId = `hierarchy-${page}`;
+        const section = (title, level, values) => `
+            <section>
+                <div class="font-label-md text-label-md text-on-surface mb-sm">${title}</div>
+                <div class="check-list">
+                    ${values.length ? values.map(value => `
+                        <label class="check-option">
+                            <input type="checkbox"
+                                data-filter-page="${page}"
+                                data-hierarchy-level="${level}"
+                                data-filter-value="${value}"
+                                ${hierarchy[level].includes(value) ? 'checked' : ''}>
+                            <span>${value}</span>
+                        </label>
+                    `).join('') : '<span class="text-on-surface-variant text-body-md">Select parent level first</span>'}
+                </div>
+            </section>
+        `;
+
+        return `
+            <div class="filter-dropdown">
+                <span class="control-label">Hierarchy</span>
+                <button type="button" class="filter-trigger mt-xs" data-dropdown-toggle="${dropdownId}" aria-expanded="${this.openDropdown === dropdownId}">
+                    <span class="material-symbols-outlined text-[18px]">account_tree</span>
+                    <span class="filter-summary">${this.getHierarchySummary(page)}</span>
+                    <span class="material-symbols-outlined text-[18px]">expand_more</span>
+                </button>
+                <div id="${dropdownId}" class="filter-popover" ${this.openDropdown === dropdownId ? '' : 'hidden'}>
+                    <div class="flex justify-between items-center mb-md">
+                        <div>
+                            <div class="font-title-lg text-title-lg">Filter by hierarchy</div>
+                            <div class="text-body-md text-on-surface-variant">Campus, faculty, then department</div>
+                        </div>
+                        <button type="button" class="text-primary font-label-md" data-clear-hierarchy="${page}">Clear all</button>
+                    </div>
+                    <div class="hierarchy-columns">
+                        ${section('Campus', 'campuses', options.campuses)}
+                        ${section('Faculty / Division', 'faculties', options.faculties)}
+                        ${section('Department / Unit', 'departments', options.departments)}
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    createDateFilter(page) {
+        const date = this.state[page].filter.date;
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const years = [2022, 2023, 2024, 2025, 2026];
+        const customValue = date.mode === 'custom' && date.range.length === 2
+            ? `${date.range[0]} to ${date.range[1]}`
+            : '';
+
+        return `
+            <div class="date-filter">
+                <label class="control-label">Period
+                    <select class="filter-select compact-select" data-filter-page="${page}" data-date-field="mode">
+                        <option value="month" ${date.mode === 'month' ? 'selected' : ''}>Month</option>
+                        <option value="year" ${date.mode === 'year' ? 'selected' : ''}>Year</option>
+                    </select>
+                </label>
+                ${date.mode !== 'year' ? `
+                    <label class="control-label">Month
+                        <select class="filter-select compact-select" data-filter-page="${page}" data-date-field="month">
+                            ${months.map((month, index) => `<option value="${index + 1}" ${date.month === index + 1 ? 'selected' : ''}>${month}</option>`).join('')}
+                        </select>
+                    </label>
+                ` : ''}
+                <label class="control-label">Year
+                    <select class="filter-select compact-select" data-filter-page="${page}" data-date-field="year">
+                        ${years.map(year => `<option value="${year}" ${date.year === year ? 'selected' : ''}>${year}</option>`).join('')}
+                    </select>
+                </label>
+                <label class="control-label">Custom range
+                    <input type="text" class="filter-select date-range-input" data-date-page="${page}" value="${customValue}" placeholder="Select dates" readonly>
+                </label>
+            </div>
+        `;
+    },
+
+    createFilterToolbar(page) {
+        return `
+            <div class="filter-toolbar">
+                ${this.createHierarchyDropdown(page)}
+                ${this.createDateFilter(page)}
+            </div>
+        `;
+    },
+
+    initDatePickers() {
+        if (typeof flatpickr !== 'function') return;
+        document.querySelectorAll('.date-range-input').forEach(input => {
+            const page = input.dataset.datePage;
+            const date = this.state[page].filter.date;
+            flatpickr(input, {
+                mode: 'range',
+                dateFormat: 'Y-m-d',
+                defaultDate: date.range,
+                maxDate: 'today',
+                onClose: selectedDates => {
+                    if (selectedDates.length !== 2) return;
+                    const toIso = value => {
+                        const year = value.getFullYear();
+                        const month = String(value.getMonth() + 1).padStart(2, '0');
+                        const day = String(value.getDate()).padStart(2, '0');
+                        return `${year}-${month}-${day}`;
+                    };
+                    date.mode = 'custom';
+                    date.range = selectedDates.map(toIso);
+                    this.resetPage(page);
+                    this.render(this.currentPage);
+                },
+            });
+        });
+    },
+
+    getFilterLabel(page) {
+        const { date } = this.state[page].filter;
+        const hierarchyLabel = this.getHierarchySummary(page);
+        const dateLabel = date.mode === 'custom' && date.range.length === 2
+            ? `${date.range[0]} to ${date.range[1]}`
+            : date.mode === 'year'
+                ? `${date.year}`
+                : `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.month - 1]} ${date.year}`;
+        return `${hierarchyLabel} | ${dateLabel}`;
+    },
+
+    createPagination(totalPages, currentPage, target) {
+        if (totalPages <= 1) return '';
+        const pages = Array.from({ length: totalPages }, (_, index) => index + 1);
+        return `
+            <div class="flex justify-center items-center gap-sm mt-md text-body-lg">
+                <button type="button" class="pagination-btn" data-pagination-target="${target}" data-page-number="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''} title="Previous page">
+                    <span class="material-symbols-outlined text-[18px]">chevron_left</span>
+                </button>
+                ${pages.map(page => `<button type="button" class="pagination-btn ${page === currentPage ? 'active' : ''}" data-pagination-target="${target}" data-page-number="${page}">${page}</button>`).join('')}
+                <button type="button" class="pagination-btn" data-pagination-target="${target}" data-page-number="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''} title="Next page">
+                    <span class="material-symbols-outlined text-[18px]">chevron_right</span>
+                </button>
+            </div>
+        `;
+    },
+
     createDashboardPage() {
-        const { scope, period } = this.state.dashboard;
-        const data = MockData.getDashboardData(scope, period);
-        const scopeFilters = this.createFilterGroup(['Overview', 'Faculty', 'Department'], scope, 'dashboard', 'scope');
-        const timeFilters = this.createFilterGroup(['7 Days', 'Month', 'Year', 'Custom'], period, 'dashboard', 'period');
+        const live = this.liveData.dashboard;
+        const metricMeta = {
+            ACTIVE_USERS: ['ACTIVE USERS', 'group'],
+            TOKEN_CONSUMPTION: ['TOKEN CONSUMPTION', 'token'],
+            COIN_CONSUMPTION: ['COIN CONSUMPTION', 'toll'],
+            TOTAL_TRANSACTIONS: ['TOTAL TRANSACTIONS', 'forum'],
+        };
+        const data = {
+            kpis: live.metrics.map(metric => {
+                const [label, icon] = metricMeta[metric.metricName] || [metric.metricName, 'analytics'];
+                const numeric = Number(metric.value || 0);
+                const value = metric.unit === 'Coin'
+                    ? `${numeric.toLocaleString(undefined, { maximumFractionDigits: 1 })} Coin`
+                    : metric.unit === 'tokens'
+                        ? this.formatCompact(numeric)
+                        : numeric.toLocaleString();
+                const change = metric.changePercent == null
+                    ? 'Current filtered period'
+                    : `${metric.changePercent >= 0 ? '+' : ''}${metric.changePercent}% vs previous period`;
+                return {
+                    label,
+                    value,
+                    change,
+                    icon,
+                    type: metric.changePercent > 0 ? 'positive' : metric.changePercent < 0 ? 'negative' : 'neutral',
+                };
+            }),
+            monthly: live.monthly.map(item => ({
+                month: `${item.month} ${item.year}`,
+                usage: Number(item.usage || 0),
+            })),
+            topics: live.topics,
+        };
 
         return `
             ${this.createPageHeader(
                 'Dashboard Overview',
-                'System performance and usage metrics for KUCSGenAI.',
-                `<div class="flex gap-md">${scopeFilters}${timeFilters}</div>`
+                'System performance and usage metrics from the live dashboard database.',
+                this.createFilterToolbar('dashboard')
             )}
 
             <div class="grid grid-cols-4 gap-gutter mb-gutter">
@@ -583,9 +1087,14 @@ const App = {
         `;
     },
 
-    generateFullHeatmapGrid() {
-        const colors = ['#dde8dd', '#bad0bd', '#8db394', '#4a8655', '#0d631b'];
-        const pattern = [
+    generateFullHeatmapGrid(data = null) {
+        const palettes = {
+            forest: ['#dde8dd', '#bad0bd', '#8db394', '#4a8655', '#0d631b'],
+            ocean: ['#e1edf6', '#bfd8e9', '#8db9d7', '#4d8dbb', '#0054a7'],
+            graphite: ['#e5e7e9', '#c9ced2', '#a5adb4', '#737d85', '#343a40'],
+        };
+        const colors = palettes[this.state.settings.theme] || palettes.forest;
+        const fallbackPattern = [
             1, 1, 2, 1, 0, 0, 0, 0,
             3, 4, 3, 4, 2, 2, 2, 2,
             3, 4, 3, 4, 2, 2, 2, 2,
@@ -594,6 +1103,20 @@ const App = {
             2, 2, 1, 2, 0, 0, 0, 0,
             2, 2, 1, 2, 0, 0, 0, 0,
         ];
+        const values = data ? Array.from({ length: 56 }, () => 0) : null;
+        if (values) {
+            data.forEach(item => {
+                const day = Number(item.day);
+                const hourIndex = Math.floor(Number(item.hour) / 3);
+                if (day >= 0 && day < 7 && hourIndex >= 0 && hourIndex < 8) {
+                    values[(day * 8) + hourIndex] = Number(item.value || 0);
+                }
+            });
+        }
+        const max = values ? Math.max(...values, 1) : 1;
+        const pattern = values
+            ? values.map(value => Math.min(4, Math.floor((value / max) * 4)))
+            : fallbackPattern;
         return pattern.map(value => `<div class="w-full h-full min-h-[28px] rounded-sm" style="background-color: ${colors[value]};"></div>`).join('');
     },
 

@@ -1,6 +1,26 @@
 // Charts Module
 const Charts = {
     chartInstances: {},
+    palettes: {
+        forest: ['#0d631b', '#0054a7', '#7faa85', '#94a89a', '#dce6dc'],
+        ocean: ['#0054a7', '#00838f', '#5b8fc9', '#79a8a9', '#dbe9ef'],
+        graphite: ['#343a40', '#606970', '#7f8991', '#a3abb1', '#e0e3e5'],
+    },
+
+    getThemePalette(count = 5) {
+        const theme = document.body.dataset.theme || 'forest';
+        const palette = this.palettes[theme] || this.palettes.forest;
+        return Array.from({ length: count }, (_, index) => palette[index % palette.length]);
+    },
+
+    withAlpha(hex, alpha) {
+        const value = hex.replace('#', '');
+        const number = Number.parseInt(value, 16);
+        const red = (number >> 16) & 255;
+        const green = (number >> 8) & 255;
+        const blue = number & 255;
+        return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+    },
 
     centerTextPlugin: {
         id: 'centerText',
@@ -69,7 +89,10 @@ const Charts = {
         if (!ctx) return;
         this.destroy(canvasId);
 
-        const colors = labels.map((_, i) => i === highlightIndex ? '#3b8549' : i === 2 ? '#e0e8e0' : '#e8e6e6');
+        const palette = this.getThemePalette();
+        const colors = labels.map((_, index) => (
+            index === highlightIndex ? palette[0] : index === 2 ? palette[3] : palette[4]
+        ));
 
         this.chartInstances[canvasId] = new Chart(ctx, {
             type: 'bar',
@@ -115,6 +138,7 @@ const Charts = {
         if (!ctx) return;
         this.destroy(canvasId);
 
+        const palette = this.getThemePalette();
         this.chartInstances[canvasId] = new Chart(ctx, {
             type: 'line',
             data: {
@@ -122,12 +146,12 @@ const Charts = {
                 datasets: [{
                     label: title,
                     data,
-                    borderColor: '#0d631b',
-                    backgroundColor: 'rgba(13, 99, 27, 0.1)',
+                    borderColor: palette[0],
+                    backgroundColor: this.withAlpha(palette[0], 0.12),
                     borderWidth: 5,
                     fill: true,
                     tension: 0.3,
-                    pointBackgroundColor: '#0d631b',
+                    pointBackgroundColor: palette[0],
                     pointBorderColor: '#ffffff',
                     pointBorderWidth: 2,
                     pointRadius: 5,
@@ -159,18 +183,19 @@ const Charts = {
         });
     },
 
-    createDoughnutChart(canvasId, labels, data, colors, centerText = null, subtext = null) {
+    createDoughnutChart(canvasId, labels, data, colors, centerText = null, subtext = null, onSelect = null) {
         const ctx = document.getElementById(canvasId);
         if (!ctx) return;
         this.destroy(canvasId);
 
+        const themedColors = this.getThemePalette(data.length);
         this.chartInstances[canvasId] = new Chart(ctx, {
             type: 'doughnut',
             data: {
                 labels,
                 datasets: [{
                     data,
-                    backgroundColor: colors,
+                    backgroundColor: themedColors,
                     borderColor: '#fbf9f9',
                     borderWidth: 3,
                 }]
@@ -179,6 +204,12 @@ const Charts = {
                 responsive: true,
                 maintainAspectRatio: false,
                 cutout: '62%',
+                onClick: onSelect ? (event, elements) => {
+                    if (elements.length) onSelect(elements[0].index);
+                } : undefined,
+                onHover: onSelect ? (event, elements) => {
+                    event.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+                } : undefined,
                 plugins: {
                     centerText: centerText ? { text: centerText, subtext } : false,
                     legend: { display: false },
@@ -196,9 +227,10 @@ const Charts = {
     },
 
     createGroupedBarChart(canvasId, labels, dataset1, dataset2, label1, label2) {
+        const palette = this.getThemePalette(2);
         return this.createMultiBarChart(canvasId, labels, [
-            { label: label1, data: dataset1, color: '#0d631b' },
-            { label: label2, data: dataset2, color: '#0054a7' },
+            { label: label1, data: dataset1, color: palette[0] },
+            { label: label2, data: dataset2, color: palette[1] },
         ]);
     },
 
@@ -207,14 +239,15 @@ const Charts = {
         if (!ctx) return;
         this.destroy(canvasId);
 
+        const palette = this.getThemePalette(series.length);
         this.chartInstances[canvasId] = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels,
-                datasets: series.map(item => ({
+                datasets: series.map((item, index) => ({
                     label: item.year || item.label,
                     data: item.values || item.data,
-                    backgroundColor: item.color,
+                    backgroundColor: palette[index],
                     borderRadius: 4,
                     borderSkipped: false,
                 }))

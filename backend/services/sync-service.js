@@ -3,6 +3,7 @@ const {
     dashboardPool,
     kucsgenaiPool,
     difyPool,
+    inspectDatabaseConnections,
 } = require('../config/database');
 
 const SOURCE_START = new Date('1970-01-01T00:00:00.000Z');
@@ -43,9 +44,29 @@ const toUuid = value => {
         : null;
 };
 
+const graphModels = graph => {
+    const nodes = Array.isArray(graph?.nodes)
+        ? graph.nodes.map(node => [node.id, node])
+        : Object.entries(graph?.nodes || {});
+    return nodes.flatMap(([fallbackId, node]) => {
+        const model = node?.data?.model;
+        const provider = model?.provider;
+        const name = model?.name || model?.model || model?.model_name
+            || model?.completion_params?.model_name;
+        if (!provider || !name) return [];
+        return [{
+            nodeId: String(node.id || fallbackId),
+            provider: String(provider),
+            name: String(name),
+        }];
+    });
+};
+
 class SyncService {
     constructor() {
         this.running = false;
+        this.nodeModels = new Map();
+        this.appModels = new Map();
     }
 
     async getSchedule() {
@@ -91,7 +112,7 @@ class SyncService {
     }
 
     async getStatus() {
-        const [schedule, runResult, qualityResult, countsResult] = await Promise.all([
+        const [schedule, runResult, qualityResult, countsResult, connections] = await Promise.all([
             this.getSchedule(),
             dashboardPool.query(
                 `SELECT * FROM etl_run ORDER BY started_at DESC LIMIT 10`
@@ -107,6 +128,7 @@ class SyncService {
                     (SELECT COUNT(*) FROM fact_model_usage_event) AS model_events,
                     (SELECT COUNT(*) FROM fact_note) AS notes`
             ),
+            inspectDatabaseConnections(),
         ]);
 
         return {
@@ -115,6 +137,7 @@ class SyncService {
             recentRuns: runResult.rows,
             quality: qualityResult.rows,
             counts: countsResult.rows[0],
+            connections,
         };
     }
 
@@ -126,6 +149,21 @@ class SyncService {
         }
 
         this.running = true;
+        const connections = await inspectDatabaseConnections();
+        const dashboard = connections.find(item => item.name === 'dashboard');
+        const unsafeSources = connections.filter(item =>
+            item.name !== 'dashboard' && !item.safeReadOnly
+        );
+        if (dashboard?.status !== 'connected' || !dashboard.canWrite || unsafeSources.length) {
+            this.running = false;
+            const details = unsafeSources.map(item => item.name).join(', ');
+            throw new Error(
+                unsafeSources.length
+                    ? `Source read-only preflight failed: ${details}`
+                    : 'Dashboard database write preflight failed'
+            );
+        }
+
         const schedule = await this.getSchedule();
         const runResult = await dashboardPool.query(
             `INSERT INTO etl_run (source_name, status)
@@ -140,11 +178,11 @@ class SyncService {
             counts.apps = await this.syncApps();
             counts.users = await this.syncUsersAndOrganizations();
             counts.usage = await this.drainBatches(
-                () => this.syncUsage(schedule, runId),
+                batch => this.syncUsage(schedule, runId, batch === 0),
                 schedule.batch_size
             );
             counts.notes = await this.drainBatches(
-                () => this.syncNotes(schedule, runId),
+                batch => this.syncNotes(schedule, runId, batch === 0),
                 schedule.batch_size
             );
             counts.models = await this.syncModelUsage(schedule, runId);
@@ -188,7 +226,7 @@ class SyncService {
     async drainBatches(syncBatch, batchSize) {
         let total = 0;
         for (let batch = 0; batch < 1000; batch += 1) {
-            const processed = await syncBatch();
+            const processed = await syncBatch(batch);
             total += processed;
             if (processed < Number(batchSize)) return total;
         }
@@ -196,6 +234,8 @@ class SyncService {
     }
 
     async syncApps() {
+        this.nodeModels.clear();
+        this.appModels.clear();
         const [kucsResult, difyResult] = await Promise.all([
             kucsgenaiPool.query(
                 `SELECT
@@ -206,6 +246,7 @@ class SyncService {
                     a.source,
                     a."isActive" AS is_active,
                     a.model,
+                    a.graph,
                     a.updated_at,
                     sc."nameEn" AS sub_category_name,
                     ac."nameEn" AS category_name
@@ -267,7 +308,8 @@ class SyncService {
                         mapping_status = EXCLUDED.mapping_status,
                         source_updated_at = EXCLUDED.source_updated_at,
                         row_hash = EXCLUDED.row_hash,
-                        updated_at = NOW()`,
+                        updated_at = NOW()
+                     RETURNING app_key`,
                     [
                         row.id,
                         dify?.id || null,
@@ -284,7 +326,6 @@ class SyncService {
                         hash(payload),
                     ]
                 );
-
                 if (provider && modelName) {
                     await client.query(
                         `INSERT INTO dim_model (provider, model_name, normalized_name)
@@ -294,6 +335,30 @@ class SyncService {
                             updated_at = NOW()`,
                         [provider, modelName]
                     );
+                }
+
+                const configuredModels = graphModels(asObject(row.graph));
+                const configuredModelKeys = new Set();
+                for (const configured of configuredModels) {
+                    const modelResult = await client.query(
+                        `INSERT INTO dim_model (provider, model_name, normalized_name)
+                         VALUES ($1::text,$2::text,LOWER($2::text))
+                         ON CONFLICT (provider, model_name) DO UPDATE SET
+                            normalized_name = EXCLUDED.normalized_name,
+                            updated_at = NOW()
+                         RETURNING model_key`,
+                        [configured.provider, configured.name]
+                    );
+                    if (difyId) {
+                        configuredModelKeys.add(modelResult.rows[0].model_key);
+                        this.nodeModels.set(
+                            `${difyId}:${configured.nodeId}`,
+                            modelResult.rows[0].model_key
+                        );
+                    }
+                }
+                if (difyId && configuredModelKeys.size === 1) {
+                    this.appModels.set(difyId, [...configuredModelKeys][0]);
                 }
             }
             await client.query('COMMIT');
@@ -347,10 +412,6 @@ class SyncService {
         const client = await dashboardPool.connect();
         try {
             await client.query('BEGIN');
-            const unknownOrgKey = await this.ensureOrgUnit(
-                client, null, 'unit', 'unit:unknown', 'Unknown'
-            );
-
             for (const row of rows) {
                 const info = asObject(row.user_info);
                 const memberType = typeof row.member_type === 'string'
@@ -387,7 +448,7 @@ class SyncService {
                 );
                 const userKey = userResult.rows[0].user_key;
 
-                let orgKey = unknownOrgKey;
+                let orgKey = null;
                 const campus = info.campus;
                 const faculty = info['faculty-id'] || info.faculty || info['ku-faculty-en'];
                 const department = info['department-id'] || info.department || info['ku-department-en'];
@@ -401,7 +462,7 @@ class SyncService {
                         : campusKey;
                     orgKey = department
                         ? await this.ensureOrgUnit(client, facultyKey, 'department', `department:${department}`, info['ku-department-en'] || info.department || department)
-                        : facultyKey || campusKey || unknownOrgKey;
+                        : facultyKey || campusKey || null;
                 }
 
                 const current = await client.query(
@@ -411,19 +472,24 @@ class SyncService {
                      LIMIT 1`,
                     [userKey]
                 );
-                if (!current.rowCount || Number(current.rows[0].org_unit_key) !== Number(orgKey)) {
+                const changed = !current.rowCount
+                    ? Boolean(orgKey)
+                    : Number(current.rows[0].org_unit_key) !== Number(orgKey);
+                if (changed) {
                     await client.query(
                         `UPDATE user_org_history
                          SET is_current = FALSE, valid_to = NOW()
                          WHERE user_key = $1 AND is_current`,
                         [userKey]
                     );
-                    await client.query(
-                        `INSERT INTO user_org_history (
-                            user_key, org_unit_key, valid_from, row_hash
-                         ) VALUES ($1,$2,NOW(),$3)`,
-                        [userKey, orgKey, hash({ userKey, orgKey })]
-                    );
+                    if (orgKey) {
+                        await client.query(
+                            `INSERT INTO user_org_history (
+                                user_key, org_unit_key, valid_from, row_hash
+                             ) VALUES ($1,$2,NOW(),$3)`,
+                            [userKey, orgKey, hash({ userKey, orgKey })]
+                        );
+                    }
                 }
             }
             await client.query('COMMIT');
@@ -460,17 +526,21 @@ class SyncService {
         );
     }
 
-    async syncUsage(schedule, runId) {
+    async syncUsage(schedule, runId, includeOverlap = false) {
         const watermark = await this.getWatermark('kucsgenai', 'user_app_usage');
         const since = new Date(watermark.cursor_timestamp || SOURCE_START);
-        since.setMinutes(since.getMinutes() - Number(schedule.overlap_minutes || 10));
+        const cursorId = includeOverlap ? '' : String(watermark.cursor_id || '');
+        if (includeOverlap) {
+            since.setMinutes(since.getMinutes() - Number(schedule.overlap_minutes || 10));
+        }
         const { rows } = await kucsgenaiPool.query(
             `SELECT *
              FROM user_app_usage
-             WHERE updated_at >= $1
+             WHERE updated_at > $1
+                OR (updated_at = $1 AND id::text > $2)
              ORDER BY updated_at, id
-             LIMIT $2`,
-            [since, schedule.batch_size]
+             LIMIT $3`,
+            [since, cursorId, schedule.batch_size]
         );
         if (!rows.length) return 0;
 
@@ -482,16 +552,10 @@ class SyncService {
                     `SELECT
                         u.user_key,
                         a.app_key,
-                        COALESCE(uoh.org_unit_key, unknown_org.org_unit_key) AS org_unit_key
+                        uoh.org_unit_key
                      FROM dim_user u
                      JOIN dim_app a ON a.kucs_app_id = $2
                      LEFT JOIN user_org_history uoh ON uoh.user_key = u.user_key AND uoh.is_current
-                     LEFT JOIN LATERAL (
-                        SELECT org_unit_key
-                        FROM dim_org_unit
-                        WHERE source_code = 'unit:unknown' AND is_current
-                        LIMIT 1
-                     ) unknown_org ON TRUE
                      WHERE u.source_user_id = $1`,
                     [String(row.user_id), row.app_id]
                 );
@@ -500,6 +564,7 @@ class SyncService {
                 const qualityFlags = [];
                 if (!keys.user_key) qualityFlags.push('user_unmapped');
                 if (!keys.app_key) qualityFlags.push('app_unmapped');
+                if (!keys.org_unit_key) qualityFlags.push('org_unmapped');
                 if (row.total_coins == null) qualityFlags.push('total_coins_missing');
 
                 await client.query(
@@ -570,10 +635,13 @@ class SyncService {
         }
     }
 
-    async syncNotes(schedule, runId) {
+    async syncNotes(schedule, runId, includeOverlap = false) {
         const watermark = await this.getWatermark('kucsgenai', 'ai_notes');
         const since = new Date(watermark.cursor_timestamp || SOURCE_START);
-        since.setMinutes(since.getMinutes() - Number(schedule.overlap_minutes || 10));
+        const cursorId = includeOverlap ? '' : String(watermark.cursor_id || '');
+        if (includeOverlap) {
+            since.setMinutes(since.getMinutes() - Number(schedule.overlap_minutes || 10));
+        }
         const { rows } = await kucsgenaiPool.query(
             `SELECT
                 id,
@@ -583,10 +651,11 @@ class SyncService {
                 "createdAt" AS created_at,
                 "updatedAt" AS updated_at
              FROM ai_notes
-             WHERE "updatedAt" >= $1
+             WHERE "updatedAt" > $1
+                OR ("updatedAt" = $1 AND id::text > $2)
              ORDER BY "updatedAt", id
-             LIMIT $2`,
-            [since, schedule.batch_size]
+             LIMIT $3`,
+            [since, cursorId, schedule.batch_size]
         );
         if (!rows.length) return 0;
 
@@ -660,30 +729,34 @@ class SyncService {
 
     async syncModelUsage(schedule, runId) {
         const messageCount = await this.drainBatches(
-            () => this.syncMessages(schedule, runId),
+            batch => this.syncMessages(schedule, runId, batch === 0),
             schedule.batch_size
         );
         const workflowCount = await this.drainBatches(
-            () => this.syncWorkflowNodes(schedule, runId),
+            batch => this.syncWorkflowNodes(schedule, runId, batch === 0),
             schedule.batch_size
         );
         return messageCount + workflowCount;
     }
 
-    async syncMessages(schedule, runId) {
+    async syncMessages(schedule, runId, includeOverlap = false) {
         const watermark = await this.getWatermark('dify', 'messages');
         const since = new Date(watermark.cursor_timestamp || SOURCE_START);
-        since.setMinutes(since.getMinutes() - Number(schedule.overlap_minutes || 10));
+        const cursorId = includeOverlap ? '' : String(watermark.cursor_id || '');
+        if (includeOverlap) {
+            since.setMinutes(since.getMinutes() - Number(schedule.overlap_minutes || 10));
+        }
         const { rows } = await difyPool.query(
             `SELECT
                 id, app_id, conversation_id, model_provider, model_id,
                 message_tokens, answer_tokens, total_price, currency,
                 provider_response_latency, status, created_at, updated_at
              FROM messages
-             WHERE updated_at >= $1
+             WHERE updated_at > $1
+                OR (updated_at = $1 AND id::text > $2)
              ORDER BY updated_at, id
-             LIMIT $2`,
-            [since, schedule.batch_size]
+             LIMIT $3`,
+            [since, cursorId, schedule.batch_size]
         );
         if (!rows.length) return 0;
 
@@ -697,15 +770,28 @@ class SyncService {
                     [row.app_id]
                 );
                 const appRow = app.rows[0];
-                const provider = row.model_provider || appRow?.configured_provider || 'unknown';
-                const modelName = row.model_id || appRow?.configured_model || 'unknown';
-                const model = await client.query(
-                    `INSERT INTO dim_model (provider, model_name, normalized_name)
-                     VALUES ($1::text,$2::text,LOWER($2::text))
-                     ON CONFLICT (provider, model_name) DO UPDATE SET updated_at = NOW()
-                     RETURNING model_key`,
-                    [provider, modelName]
-                );
+                const provider = row.model_provider || appRow?.configured_provider;
+                const modelName = row.model_id || appRow?.configured_model;
+                let modelKey = this.appModels.get(String(row.app_id));
+                if (provider && modelName) {
+                    const model = await client.query(
+                        `INSERT INTO dim_model (provider, model_name, normalized_name)
+                         VALUES ($1::text,$2::text,LOWER($2::text))
+                         ON CONFLICT (provider, model_name) DO UPDATE SET updated_at = NOW()
+                         RETURNING model_key`,
+                        [provider, modelName]
+                    );
+                    modelKey = model.rows[0].model_key;
+                }
+                if (!modelKey) {
+                    const model = await client.query(
+                        `INSERT INTO dim_model (provider, model_name, normalized_name)
+                         VALUES ('unknown','unknown','unknown')
+                         ON CONFLICT (provider, model_name) DO UPDATE SET updated_at = NOW()
+                         RETURNING model_key`
+                    );
+                    modelKey = model.rows[0].model_key;
+                }
                 const usage = await client.query(
                     `SELECT usage_event_key
                      FROM fact_usage_event
@@ -735,7 +821,7 @@ class SyncService {
                     [
                         usage.rows[0]?.usage_event_key || null,
                         appRow?.app_key || null,
-                        model.rows[0].model_key,
+                        modelKey,
                         row.id,
                         row.created_at,
                         row.status,
@@ -743,7 +829,11 @@ class SyncService {
                         row.total_price,
                         row.currency,
                         row.provider_response_latency,
-                        row.model_id ? 'runtime' : 'app_config_fallback',
+                        row.model_id
+                            ? 'runtime'
+                            : this.appModels.has(String(row.app_id))
+                                ? 'single_graph_model'
+                                : 'unmapped_message',
                     ]
                 );
             }
@@ -759,20 +849,24 @@ class SyncService {
         }
     }
 
-    async syncWorkflowNodes(schedule, runId) {
+    async syncWorkflowNodes(schedule, runId, includeOverlap = false) {
         const watermark = await this.getWatermark('dify', 'workflow_node_executions');
         const since = new Date(watermark.cursor_timestamp || SOURCE_START);
-        since.setMinutes(since.getMinutes() - Number(schedule.overlap_minutes || 10));
+        const cursorId = includeOverlap ? '' : String(watermark.cursor_id || '');
+        if (includeOverlap) {
+            since.setMinutes(since.getMinutes() - Number(schedule.overlap_minutes || 10));
+        }
         const { rows } = await difyPool.query(
             `SELECT
-                id, app_id, workflow_run_id, node_type, status, elapsed_time,
+                id, app_id, workflow_run_id, node_id, node_type, status, elapsed_time,
                 execution_metadata, created_at
              FROM workflow_node_executions
-             WHERE created_at >= $1
+             WHERE (created_at > $1
+                OR (created_at = $1 AND id::text > $2))
                AND node_type = 'llm'
              ORDER BY created_at, id
-             LIMIT $2`,
-            [since, schedule.batch_size]
+             LIMIT $3`,
+            [since, cursorId, schedule.batch_size]
         );
         if (!rows.length) return 0;
 
@@ -782,20 +876,20 @@ class SyncService {
             for (const row of rows) {
                 const metadata = asObject(row.execution_metadata);
                 const app = await client.query(
-                    `SELECT app_key, configured_provider, configured_model
-                     FROM dim_app WHERE dify_app_id = $1`,
+                    `SELECT app_key FROM dim_app WHERE dify_app_id = $1`,
                     [row.app_id]
                 );
                 const appRow = app.rows[0];
-                const provider = appRow?.configured_provider || 'unknown';
-                const modelName = appRow?.configured_model || 'unknown';
-                const model = await client.query(
-                    `INSERT INTO dim_model (provider, model_name, normalized_name)
-                     VALUES ($1::text,$2::text,LOWER($2::text))
-                     ON CONFLICT (provider, model_name) DO UPDATE SET updated_at = NOW()
-                     RETURNING model_key`,
-                    [provider, modelName]
-                );
+                let modelKey = this.nodeModels.get(`${row.app_id}:${row.node_id}`);
+                if (!modelKey) {
+                    const model = await client.query(
+                        `INSERT INTO dim_model (provider, model_name, normalized_name)
+                         VALUES ('unknown','unknown','unknown')
+                         ON CONFLICT (provider, model_name) DO UPDATE SET updated_at = NOW()
+                         RETURNING model_key`
+                    );
+                    modelKey = model.rows[0].model_key;
+                }
                 await client.query(
                     `INSERT INTO fact_model_usage_event (
                         app_key, model_key, source_table, source_event_id,
@@ -814,7 +908,7 @@ class SyncService {
                         loaded_at = NOW()`,
                     [
                         appRow?.app_key || null,
-                        model.rows[0].model_key,
+                        modelKey,
                         row.id,
                         row.workflow_run_id,
                         row.created_at,
@@ -824,7 +918,9 @@ class SyncService {
                         metadata.total_price || null,
                         metadata.currency || null,
                         row.elapsed_time,
-                        'workflow_app_config',
+                        this.nodeModels.has(`${row.app_id}:${row.node_id}`)
+                            ? 'kucs_graph_node'
+                            : 'unmapped_node',
                     ]
                 );
             }

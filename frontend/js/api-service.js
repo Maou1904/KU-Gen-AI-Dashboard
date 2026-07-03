@@ -5,8 +5,10 @@
  */
 
 const API = {
-    BASE_URL: window.APP_CONFIG?.API_BASE_URL || 'http://localhost:5000/api',
+    BASE_URL: window.APP_CONFIG?.API_BASE_URL
+        || `${window.location.protocol}//${window.location.hostname}:5000/api`,
     TIMEOUT: 5000,
+    lastError: null,
 
     /**
      * Generic fetch wrapper with error handling
@@ -29,75 +31,101 @@ const API = {
             ]);
 
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                const body = await response.json().catch(() => ({}));
+                throw new Error(body.error || `HTTP ${response.status}: ${response.statusText}`);
             }
 
             const data = await response.json();
+            this.lastError = null;
             return data;
         } catch (error) {
+            this.lastError = error.message;
             console.warn(`API request failed for ${endpoint}:`, error.message);
             return null;
         }
     },
 
     // Dashboard endpoints
-    async getDashboardMetrics() {
-        return this.request('/dashboard/metrics');
+    async getDashboardMetrics(query = '') {
+        return this.request(`/dashboard/metrics${query}`);
     },
 
-    async getMonthlyUsage() {
-        return this.request('/dashboard/monthly-usage');
+    async getMonthlyUsage(query = '') {
+        return this.request(`/dashboard/monthly-usage${query}`);
     },
 
-    async getTrendingTopics() {
-        return this.request('/dashboard/trending-topics');
+    async getTrendingTopics(query = '') {
+        return this.request(`/dashboard/trending-topics${query}`);
     },
 
     // API Management endpoints
-    async getModelConsumption() {
-        return this.request('/api-management/model-consumption');
+    async getProviderConsumption(query = '') {
+        return this.request(`/api-management/provider-consumption${query}`);
     },
 
-    async getHierarchyData() {
-        return this.request('/api-management/hierarchy');
+    async getModelConsumption(query = '') {
+        return this.request(`/api-management/model-consumption${query}`);
     },
 
-    async getCosts() {
-        return this.request('/api-management/costs');
+    async getHierarchyData(query = '') {
+        return this.request(`/api-management/hierarchy${query}`);
+    },
+
+    async getCosts(query = '') {
+        return this.request(`/api-management/costs${query}`);
     },
 
     // Department endpoints
-    async getDepartmentSummary() {
-        return this.request('/department/summary');
+    async getDepartmentSummary(query = '') {
+        return this.request(`/department/summary${query}`);
     },
 
-    async getDepartmentKPIs() {
-        return this.request('/department/kpis');
+    async getDepartmentKPIs(query = '') {
+        return this.request(`/department/kpis${query}`);
     },
 
     async getGrowthData() {
         return this.request('/department/growth');
     },
 
-    async getHeatmapData() {
-        return this.request('/department/heatmap');
+    async getHeatmapData(query = '') {
+        return this.request(`/department/heatmap${query}`);
     },
 
     // Behavior endpoints
-    async getDailyUsers() {
-        return this.request('/behavior/daily-users');
+    async getDailyUsers(query = '') {
+        return this.request(`/behavior/daily-users${query}`);
     },
 
-    async getTrendingTags() {
-        return this.request('/behavior/trending-tags');
+    async getTrendingTags(query = '') {
+        return this.request(`/behavior/trending-tags${query}`);
     },
 
-    async getAppDistribution() {
-        return this.request('/behavior/app-distribution');
+    async getAppDistribution(query = '') {
+        return this.request(`/behavior/app-distribution${query}`);
     },
 
-    async getBehaviorKPI() {
-        return this.request('/behavior/kpi');
+    async getBehaviorKPI(query = '') {
+        return this.request(`/behavior/kpi${query}`);
+    },
+
+    async getSyncStatus() {
+        return this.request('/sync/status');
+    },
+
+    async getSyncPreflight() {
+        return this.request('/sync/preflight');
+    },
+
+    async updateSyncSchedule(payload) {
+        return this.request('/sync/schedule', {
+            method: 'PUT',
+            body: JSON.stringify(payload),
+        });
+    },
+
+    async runSync() {
+        return this.request('/sync/run', { method: 'POST' });
     },
 
     // Health check

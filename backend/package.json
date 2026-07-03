@@ -9,6 +9,7 @@
     "check": "node --check server.js && node --check config/database.js && node --check services/sync-service.js && node --check services/scheduler.js && node --check routes/sync.js",
     "migrate": "node database/migrate.js",
     "sync:once": "node scripts/sync-once.js",
+    "repair:mappings": "node scripts/repair-live-mappings.js",
     "test:integration": "node tests/integration.js"
   },
   "dependencies": {
