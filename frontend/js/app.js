@@ -141,6 +141,12 @@ const App = {
             return;
         }
 
+        const resetFilters = event.target.closest('[data-reset-filters]');
+        if (resetFilters) {
+            this.resetFilters(resetFilters.dataset.resetFilters);
+            return;
+        }
+
         const appDrilldown = event.target.closest('[data-app-drilldown]');
         if (appDrilldown) {
             this.state.consumption.drilldownApp = appDrilldown.dataset.appDrilldown;
@@ -383,31 +389,43 @@ const App = {
         const date = filter.date;
         let start;
         let end;
-        if (date.mode === 'custom' && date.range.length === 2) {
-            [start, end] = date.range;
-        } else if (date.mode === 'year') {
-            start = `${date.year}-01-01`;
-            end = `${date.year}-12-31`;
-        } else {
-            const lastDay = new Date(date.year, date.month, 0).getDate();
-            start = `${date.year}-${String(date.month).padStart(2, '0')}-01`;
-            end = `${date.year}-${String(date.month).padStart(2, '0')}-${lastDay}`;
+        if (date.mode !== 'all') {
+            if (date.mode === 'custom' && date.range.length === 2) {
+                [start, end] = date.range;
+            } else if (date.mode === 'year') {
+                start = `${date.year}-01-01`;
+                end = `${date.year}-12-31`;
+            } else {
+                const lastDay = new Date(date.year, date.month, 0).getDate();
+                start = `${date.year}-${String(date.month).padStart(2, '0')}-01`;
+                end = `${date.year}-${String(date.month).padStart(2, '0')}-${lastDay}`;
+            }
+            params.set('start', start);
+            params.set('end', end);
         }
-        params.set('start', start);
-        params.set('end', end);
         const hierarchy = filter.hierarchy;
         if (hierarchy.campuses.length) params.set('campuses', hierarchy.campuses.join(','));
         if (hierarchy.faculties.length) params.set('faculties', hierarchy.faculties.join(','));
         if (hierarchy.departments.length) params.set('departments', hierarchy.departments.join(','));
-        return `?${params.toString()}`;
+        const query = params.toString();
+        return query ? `?${query}` : '';
     },
 
     applyLiveDataAsOf(page, value) {
-        if (!value || this.state[page].liveDateInitialized) return;
+        if (!value) return;
         const dataAsOf = new Date(value);
         if (Number.isNaN(dataAsOf.getTime())) return;
-        this.state[page].filter.date.month = dataAsOf.getMonth() + 1;
-        this.state[page].filter.date.year = dataAsOf.getFullYear();
+        const latestDate = {
+            month: dataAsOf.getMonth() + 1,
+            year: dataAsOf.getFullYear(),
+        };
+        this.state[page].latestDate = latestDate;
+        if (this.state[page].liveDateInitialized) return;
+        this.state[page].filter.date = {
+            mode: 'month',
+            ...latestDate,
+            range: [],
+        };
         this.state[page].liveDateInitialized = true;
     },
 
@@ -497,6 +515,25 @@ const App = {
     resetPage(page) {
         if (page === 'analytics') this.state.analytics.page = 1;
         if (page === 'consumption') this.state.consumption.hierarchyPage = 1;
+    },
+
+    resetFilters(page) {
+        const currentDate = this.state[page].filter.date;
+        const latestDate = this.state[page].latestDate || {
+            month: currentDate.month,
+            year: currentDate.year,
+        };
+        this.state[page].filter = {
+            hierarchy: { campuses: [], faculties: [], departments: [] },
+            date: { mode: 'month', ...latestDate, range: [] },
+        };
+        if (page === 'consumption') {
+            this.state.consumption.drilldownApp = null;
+            this.state.consumption.selectedYears = [String(latestDate.year)];
+        }
+        this.openDropdown = null;
+        this.resetPage(page);
+        this.render(this.currentPage);
     },
 
     getHierarchyOptions(page) {
@@ -599,23 +636,27 @@ const App = {
                     <select class="filter-select compact-select" data-filter-page="${page}" data-date-field="mode">
                         <option value="month" ${date.mode === 'month' ? 'selected' : ''}>Month</option>
                         <option value="year" ${date.mode === 'year' ? 'selected' : ''}>Year</option>
+                        <option value="all" ${date.mode === 'all' ? 'selected' : ''}>All time</option>
+                        ${date.mode === 'custom' ? '<option value="custom" selected>Custom</option>' : ''}
                     </select>
                 </label>
-                ${date.mode !== 'year' ? `
+                ${date.mode === 'month' ? `
                     <label class="control-label">Month
                         <select class="filter-select compact-select" data-filter-page="${page}" data-date-field="month">
                             ${months.map((month, index) => `<option value="${index + 1}" ${date.month === index + 1 ? 'selected' : ''}>${month}</option>`).join('')}
                         </select>
                     </label>
                 ` : ''}
-                <label class="control-label">Year
-                    <select class="filter-select compact-select" data-filter-page="${page}" data-date-field="year">
-                        ${years.map(year => `<option value="${year}" ${date.year === year ? 'selected' : ''}>${year}</option>`).join('')}
-                    </select>
-                </label>
-                <label class="control-label">Custom range
-                    <input type="text" class="filter-select date-range-input" data-date-page="${page}" value="${customValue}" placeholder="Select dates" readonly>
-                </label>
+                ${date.mode !== 'all' ? `
+                    <label class="control-label">Year
+                        <select class="filter-select compact-select" data-filter-page="${page}" data-date-field="year">
+                            ${years.map(year => `<option value="${year}" ${date.year === year ? 'selected' : ''}>${year}</option>`).join('')}
+                        </select>
+                    </label>
+                    <label class="control-label">Custom range
+                        <input type="text" class="filter-select date-range-input" data-date-page="${page}" value="${customValue}" placeholder="Select dates" readonly>
+                    </label>
+                ` : ''}
             </div>
         `;
     },
@@ -625,6 +666,10 @@ const App = {
             <div class="filter-toolbar">
                 ${this.createHierarchyDropdown(page)}
                 ${this.createDateFilter(page)}
+                <button type="button" class="filter-reset-button" data-reset-filters="${page}" title="Reset filters to the latest month">
+                    <span class="material-symbols-outlined text-[18px]">restart_alt</span>
+                    <span>Reset filters</span>
+                </button>
             </div>
         `;
     },
@@ -659,11 +704,13 @@ const App = {
     getFilterLabel(page) {
         const { date } = this.state[page].filter;
         const hierarchyLabel = this.getHierarchySummary(page);
-        const dateLabel = date.mode === 'custom' && date.range.length === 2
-            ? `${date.range[0]} to ${date.range[1]}`
-            : date.mode === 'year'
-                ? `${date.year}`
-                : `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.month - 1]} ${date.year}`;
+        const dateLabel = date.mode === 'all'
+            ? 'All time'
+            : date.mode === 'custom' && date.range.length === 2
+                ? `${date.range[0]} to ${date.range[1]}`
+                : date.mode === 'year'
+                    ? `${date.year}`
+                    : `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.month - 1]} ${date.year}`;
         return `${hierarchyLabel} | ${dateLabel}`;
     },
 

@@ -220,6 +220,27 @@
             flex-wrap: wrap;
             gap: 8px;
         }
+        .filter-reset-button {
+            min-height: 38px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            border: 1px solid #bfcaba;
+            border-radius: 4px;
+            background: #fffdfd;
+            color: #40493d;
+            padding: 8px 12px;
+            font-size: 12px;
+            line-height: 16px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .filter-reset-button:hover {
+            border-color: var(--theme-primary);
+            color: var(--theme-primary);
+            background: #f0f4f0;
+        }
         .filter-dropdown {
             position: relative;
         }
@@ -573,7 +594,8 @@
             }
             .filter-dropdown,
             .filter-trigger,
-            .control-label {
+            .control-label,
+            .filter-reset-button {
                 max-width: 100%;
             }
             .filter-trigger {

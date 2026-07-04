@@ -747,11 +747,12 @@ class SyncService {
             since.setMinutes(since.getMinutes() - Number(schedule.overlap_minutes || 10));
         }
         const { rows } = await difyPool.query(
-            `SELECT
-                id, app_id, conversation_id, model_provider, model_id,
-                message_tokens, answer_tokens, total_price, currency,
-                provider_response_latency, status, created_at, updated_at
-             FROM messages
+             `SELECT
+                 id, app_id, conversation_id, model_provider, model_id,
+                 message_tokens, answer_tokens, total_price, currency,
+                 provider_response_latency, workflow_run_id, status,
+                 created_at, updated_at
+              FROM messages
              WHERE updated_at > $1
                 OR (updated_at = $1 AND id::text > $2)
              ORDER BY updated_at, id
@@ -804,13 +805,17 @@ class SyncService {
                 await client.query(
                     `INSERT INTO fact_model_usage_event (
                         usage_event_key, app_key, model_key, source_table,
-                        source_event_id, event_at, node_type, status, total_tokens,
-                        total_price, currency, latency_seconds, attribution_method
-                     ) VALUES ($1,$2,$3,'messages',$4,$5,'chat',$6,$7,$8,$9,$10,$11)
+                        source_event_id, source_run_id, event_at, node_type,
+                        status, total_tokens, total_price, currency,
+                        latency_seconds, attribution_method
+                     ) VALUES (
+                        $1,$2,$3,'messages',$4,$5,$6,'chat',$7,$8,$9,$10,$11,$12
+                     )
                      ON CONFLICT (source_table, source_event_id) DO UPDATE SET
                         usage_event_key = EXCLUDED.usage_event_key,
                         app_key = EXCLUDED.app_key,
                         model_key = EXCLUDED.model_key,
+                        source_run_id = EXCLUDED.source_run_id,
                         status = EXCLUDED.status,
                         total_tokens = EXCLUDED.total_tokens,
                         total_price = EXCLUDED.total_price,
@@ -823,6 +828,7 @@ class SyncService {
                         appRow?.app_key || null,
                         modelKey,
                         row.id,
+                        row.workflow_run_id,
                         row.created_at,
                         row.status,
                         Number(row.message_tokens || 0) + Number(row.answer_tokens || 0),
@@ -857,15 +863,24 @@ class SyncService {
             since.setMinutes(since.getMinutes() - Number(schedule.overlap_minutes || 10));
         }
         const { rows } = await difyPool.query(
-            `SELECT
-                id, app_id, workflow_run_id, node_id, node_type, status, elapsed_time,
-                execution_metadata, created_at
-             FROM workflow_node_executions
-             WHERE (created_at > $1
-                OR (created_at = $1 AND id::text > $2))
-               AND node_type = 'llm'
-             ORDER BY created_at, id
-             LIMIT $3`,
+             `SELECT
+                 w.id, w.app_id, w.workflow_run_id, w.node_id, w.node_type,
+                 w.status, w.elapsed_time, w.process_data, w.execution_metadata,
+                 w.created_at, linked_message.conversation_id
+              FROM workflow_node_executions w
+              LEFT JOIN LATERAL (
+                 SELECT m.conversation_id
+                 FROM messages m
+                 WHERE m.workflow_run_id = w.workflow_run_id
+                   AND m.conversation_id IS NOT NULL
+                 ORDER BY m.created_at DESC
+                 LIMIT 1
+              ) linked_message ON TRUE
+              WHERE (w.created_at > $1
+                 OR (w.created_at = $1 AND w.id::text > $2))
+                AND w.node_type = 'llm'
+              ORDER BY w.created_at, w.id
+              LIMIT $3`,
             [since, cursorId, schedule.batch_size]
         );
         if (!rows.length) return 0;
@@ -875,12 +890,40 @@ class SyncService {
             await client.query('BEGIN');
             for (const row of rows) {
                 const metadata = asObject(row.execution_metadata);
+                const processData = asObject(row.process_data);
+                const usage = row.conversation_id
+                    ? await client.query(
+                        `SELECT usage_event_key
+                         FROM fact_usage_event
+                         WHERE source_conversation_id = $1
+                         ORDER BY event_at DESC
+                         LIMIT 1`,
+                        [String(row.conversation_id)]
+                    )
+                    : { rows: [] };
                 const app = await client.query(
                     `SELECT app_key FROM dim_app WHERE dify_app_id = $1`,
                     [row.app_id]
                 );
                 const appRow = app.rows[0];
-                let modelKey = this.nodeModels.get(`${row.app_id}:${row.node_id}`);
+                let modelKey;
+                let attributionMethod;
+                if (processData.model_provider && processData.model_name) {
+                    const model = await client.query(
+                        `INSERT INTO dim_model (provider, model_name, normalized_name)
+                         VALUES ($1::text,$2::text,LOWER($2::text))
+                         ON CONFLICT (provider, model_name) DO UPDATE SET
+                            normalized_name = EXCLUDED.normalized_name,
+                            updated_at = NOW()
+                         RETURNING model_key`,
+                        [processData.model_provider, processData.model_name]
+                    );
+                    modelKey = model.rows[0].model_key;
+                    attributionMethod = 'workflow_runtime';
+                } else {
+                    modelKey = this.nodeModels.get(`${row.app_id}:${row.node_id}`);
+                    attributionMethod = modelKey ? 'kucs_graph_node' : 'unmapped_node';
+                }
                 if (!modelKey) {
                     const model = await client.query(
                         `INSERT INTO dim_model (provider, model_name, normalized_name)
@@ -892,13 +935,18 @@ class SyncService {
                 }
                 await client.query(
                     `INSERT INTO fact_model_usage_event (
-                        app_key, model_key, source_table, source_event_id,
-                        source_run_id, event_at, node_type, status, total_tokens,
-                        total_price, currency, latency_seconds, attribution_method
-                     ) VALUES ($1,$2,'workflow_node_executions',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                        usage_event_key, app_key, model_key, source_table,
+                        source_event_id, source_run_id, event_at, node_type,
+                        status, total_tokens, total_price, currency,
+                        latency_seconds, attribution_method
+                     ) VALUES (
+                        $1,$2,$3,'workflow_node_executions',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13
+                     )
                      ON CONFLICT (source_table, source_event_id) DO UPDATE SET
+                        usage_event_key = EXCLUDED.usage_event_key,
                         app_key = EXCLUDED.app_key,
                         model_key = EXCLUDED.model_key,
+                        source_run_id = EXCLUDED.source_run_id,
                         status = EXCLUDED.status,
                         total_tokens = EXCLUDED.total_tokens,
                         total_price = EXCLUDED.total_price,
@@ -907,6 +955,7 @@ class SyncService {
                         attribution_method = EXCLUDED.attribution_method,
                         loaded_at = NOW()`,
                     [
+                        usage.rows[0]?.usage_event_key || null,
                         appRow?.app_key || null,
                         modelKey,
                         row.id,
@@ -918,9 +967,7 @@ class SyncService {
                         metadata.total_price || null,
                         metadata.currency || null,
                         row.elapsed_time,
-                        this.nodeModels.has(`${row.app_id}:${row.node_id}`)
-                            ? 'kucs_graph_node'
-                            : 'unmapped_node',
+                        attributionMethod,
                     ]
                 );
             }
@@ -1043,17 +1090,28 @@ class SyncService {
 
     async runQualityChecks(runId) {
         const checks = await dashboardPool.query(
-            `SELECT
-                COUNT(*) FILTER (WHERE mapping_status = 'unmatched') AS unmatched_apps,
-                (SELECT COUNT(*) FROM fact_usage_event WHERE user_key IS NULL OR app_key IS NULL) AS orphan_usage,
-                (SELECT COUNT(*) FROM fact_usage_event WHERE total_coins IS NULL) AS missing_coins
-             FROM dim_app`
+             `SELECT
+                 COUNT(*) FILTER (WHERE mapping_status = 'unmatched') AS unmatched_apps,
+                 (SELECT COUNT(*) FROM fact_usage_event WHERE user_key IS NULL OR app_key IS NULL) AS orphan_usage,
+                 (SELECT COUNT(*) FROM fact_usage_event WHERE total_coins IS NULL) AS missing_coins,
+                 (
+                    SELECT COUNT(*)
+                    FROM fact_model_usage_event f
+                    JOIN dim_model m ON m.model_key = f.model_key
+                    WHERE (m.provider = 'unknown' OR m.model_name = 'unknown')
+                      AND (
+                        (f.source_table = 'workflow_node_executions' AND f.status = 'succeeded')
+                        OR (f.source_table = 'messages' AND f.source_run_id IS NULL)
+                      )
+                 ) AS unattributed_model_events
+              FROM dim_app`
         );
         const values = checks.rows[0];
         const items = [
             ['unmatched_apps', values.unmatched_apps],
             ['orphan_usage', values.orphan_usage],
             ['missing_coins', values.missing_coins],
+            ['unattributed_model_events', values.unattributed_model_events],
         ];
         for (const [name, count] of items) {
             await dashboardPool.query(

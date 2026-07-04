@@ -38,6 +38,23 @@ const usageSource = `(
     LEFT JOIN dim_org_unit p2 ON p2.org_unit_key = p1.parent_org_unit_key
 )`;
 
+const modelUsageSource = `(
+    SELECT
+        f.*,
+        u.campus,
+        u.faculty,
+        u.department
+    FROM fact_model_usage_event f
+    LEFT JOIN ${usageSource} u ON u.usage_event_key = f.usage_event_key
+    WHERE (
+        f.source_table = 'workflow_node_executions'
+        AND f.status = 'succeeded'
+    ) OR (
+        f.source_table = 'messages'
+        AND f.source_run_id IS NULL
+    )
+)`;
+
 const noteSource = `(
     SELECT
         n.*,
@@ -57,4 +74,9 @@ const noteSource = `(
     LEFT JOIN dim_org_unit p2 ON p2.org_unit_key = p1.parent_org_unit_key
 )`;
 
-module.exports = { usageFilter, usageSource, noteSource };
+module.exports = {
+    usageFilter,
+    usageSource,
+    modelUsageSource,
+    noteSource,
+};

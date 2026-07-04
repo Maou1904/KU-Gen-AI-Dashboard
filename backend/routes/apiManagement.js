@@ -1,8 +1,19 @@
 const express = require('express');
 const { dashboardPool } = require('../config/database');
-const { usageFilter, usageSource } = require('./filter-utils');
+const {
+    usageFilter,
+    usageSource,
+    modelUsageSource,
+} = require('./filter-utils');
 
 const router = express.Router();
+const modelUsageScopeSql = alias => `((
+    ${alias}.source_table = 'workflow_node_executions'
+    AND ${alias}.status = 'succeeded'
+) OR (
+    ${alias}.source_table = 'messages'
+    AND ${alias}.source_run_id IS NULL
+))`;
 const modelFamilySql = alias => `CASE
     WHEN ${alias}.provider = 'unknown' OR ${alias}.model_name = 'unknown' THEN 'Unattributed'
     WHEN LOWER(${alias}.provider || ' ' || ${alias}.model_name) ~ 'openai|(^|[/ -])(gpt|chatgpt|o1|o3|o4)([/ :.-]|$)' THEN 'GPT'
@@ -31,7 +42,8 @@ router.get('/provider-consumption', async (req, res, next) => {
                     COUNT(*)::bigint AS events
                 FROM model_scope s
                 JOIN dim_model m ON m.model_key = s.model_key
-                WHERE ${filter.sql}
+                WHERE ${modelUsageScopeSql('s')}
+                  AND ${filter.sql}
                 GROUP BY ${modelFamilySql('m')}
              )
              SELECT
@@ -68,6 +80,7 @@ router.get('/model-consumption', async (req, res, next) => {
                 FROM model_scope s
                 JOIN dim_model m ON m.model_key = s.model_key
                 WHERE ($6::text IS NULL OR ${modelFamilySql('m')} = $6)
+                  AND ${modelUsageScopeSql('s')}
                   AND ${filter.sql}
                 GROUP BY m.model_key, m.model_name, m.provider
              )
@@ -91,13 +104,36 @@ router.get('/hierarchy', async (req, res, next) => {
     try {
         const filter = usageFilter(req);
         const { rows } = await dashboardPool.query(
-            `SELECT
-                campus, faculty, department,
-                SUM(total_tokens)::bigint AS "tokensUsed",
-                SUM(COALESCE(total_coins, 0)) AS "coinConsumption"
-             FROM ${usageSource} u
-             WHERE org_unit_key IS NOT NULL AND ${filter.sql}
-             GROUP BY campus, faculty, department
+            `WITH usage_summary AS (
+                SELECT
+                    campus,
+                    faculty,
+                    department,
+                    SUM(COALESCE(total_coins, 0)) AS coin_consumption
+                FROM ${usageSource} u
+                WHERE org_unit_key IS NOT NULL AND ${filter.sql}
+                GROUP BY campus, faculty, department
+             ), model_summary AS (
+                SELECT
+                    campus,
+                    faculty,
+                    department,
+                    SUM(total_tokens)::bigint AS tokens
+                FROM ${modelUsageSource} u
+                WHERE usage_event_key IS NOT NULL AND ${filter.sql}
+                GROUP BY campus, faculty, department
+             )
+             SELECT
+                a.campus,
+                a.faculty,
+                a.department,
+                COALESCE(m.tokens, 0)::bigint AS "tokensUsed",
+                a.coin_consumption AS "coinConsumption"
+             FROM usage_summary a
+             LEFT JOIN model_summary m
+               ON m.campus = a.campus
+              AND m.faculty = a.faculty
+              AND m.department = a.department
              ORDER BY "tokensUsed" DESC`,
             filter.params
         );

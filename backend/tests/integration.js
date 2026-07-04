@@ -4,6 +4,7 @@ const app = require('../server');
 const {
     connectDatabase,
     closeDatabases,
+    difyPool,
 } = require('../config/database');
 
 let server;
@@ -87,6 +88,65 @@ const run = async () => {
     const gptModels = await request(baseUrl, '/api/api-management/model-consumption?family=GPT');
     if (!gptModels.data.length || gptModels.data.some(item => !item.modelName)) {
         throw new Error('GPT provider drilldown must return model names');
+    }
+    const sourceModelUsage = await difyPool.query(
+        `SELECT
+            (
+                SELECT COALESCE(SUM(
+                    (execution_metadata::jsonb ->> 'total_tokens')::bigint
+                ), 0)
+                FROM workflow_node_executions
+                WHERE node_type = 'llm' AND status = 'succeeded'
+            ) + (
+                SELECT COALESCE(SUM(message_tokens + answer_tokens), 0)
+                FROM messages
+                WHERE workflow_run_id IS NULL
+                  AND model_provider IS NOT NULL
+                  AND model_id IS NOT NULL
+            ) AS tokens,
+            (
+                SELECT COUNT(*)
+                FROM workflow_node_executions
+                WHERE node_type = 'llm' AND status = 'succeeded'
+            ) + (
+                SELECT COUNT(*)
+                FROM messages
+                WHERE workflow_run_id IS NULL
+                  AND model_provider IS NOT NULL
+                  AND model_id IS NOT NULL
+            ) AS events`
+    );
+    const providerTokens = providers.data.reduce(
+        (sum, item) => sum + Number(item.tokens),
+        0
+    );
+    const providerEvents = providers.data.reduce(
+        (sum, item) => sum + Number(item.events),
+        0
+    );
+    if (
+        providerTokens !== Number(sourceModelUsage.rows[0].tokens)
+        || providerEvents !== Number(sourceModelUsage.rows[0].events)
+    ) {
+        throw new Error('Model consumption must reconcile to successful LLM nodes without double counting');
+    }
+    const dashboardMetrics = await request(baseUrl, '/api/dashboard/metrics');
+    const dashboardTokens = dashboardMetrics.data.find(
+        metric => metric.metricName === 'TOKEN_CONSUMPTION'
+    );
+    const departmentKPIs = await request(baseUrl, '/api/department/kpis');
+    const monthlyUsage = await request(baseUrl, '/api/dashboard/monthly-usage');
+    const monthlyTokens = monthlyUsage.data.reduce(
+        (sum, item) => sum + Number(item.tokens),
+        0
+    );
+    const expectedTokens = Number(sourceModelUsage.rows[0].tokens);
+    if (
+        Number(dashboardTokens?.value) !== expectedTokens
+        || Number(departmentKPIs.data.totalTokens) !== expectedTokens
+        || monthlyTokens !== expectedTokens
+    ) {
+        throw new Error('All-time token KPIs and trends must use the shared model usage total');
     }
 
     const appDistribution = await request(baseUrl, '/api/behavior/app-distribution');
