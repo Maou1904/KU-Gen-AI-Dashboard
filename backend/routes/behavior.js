@@ -1,6 +1,12 @@
 const express = require('express');
 const { dashboardPool } = require('../config/database');
-const { usageFilter, usageSource, noteSource } = require('./filter-utils');
+const {
+    usageFilter,
+    comparisonFilters,
+    percentChange,
+    usageSource,
+    noteSource,
+} = require('./filter-utils');
 
 const router = express.Router();
 
@@ -89,17 +95,44 @@ router.get('/app-distribution', async (req, res, next) => {
 
 router.get('/kpi', async (req, res, next) => {
     try {
-        const filter = usageFilter(req, 'n', 'created_at');
+        const filters = comparisonFilters(req, 'n', 'created_at');
         const { rows } = await dashboardPool.query(
-            `SELECT
-                COUNT(*) FILTER (WHERE is_active)::bigint AS "totalNotesGenerated",
-                COUNT(DISTINCT user_key) FILTER (WHERE is_active)::bigint AS "noteAuthors",
-                MAX(created_at) AS "dataAsOf"
-             FROM ${noteSource} n
-             WHERE ${filter.sql}`,
-            filter.params
+            `WITH current_notes AS (
+                SELECT
+                    COUNT(*) FILTER (WHERE is_active)::bigint AS total_notes,
+                    COUNT(DISTINCT user_key) FILTER (WHERE is_active)::bigint AS note_authors,
+                    MAX(created_at) AS data_as_of
+                FROM ${noteSource} n
+                WHERE ${filters.current.sql}
+             ), previous_notes AS (
+                SELECT
+                    COUNT(*) FILTER (WHERE is_active)::bigint AS total_notes,
+                    COUNT(DISTINCT user_key) FILTER (WHERE is_active)::bigint AS note_authors
+                FROM ${noteSource} n
+                WHERE ${filters.previous.sql}
+             )
+             SELECT
+                current_notes.total_notes AS "totalNotesGenerated",
+                current_notes.note_authors AS "noteAuthors",
+                previous_notes.total_notes AS "previousNotesGenerated",
+                previous_notes.note_authors AS "previousNoteAuthors",
+                current_notes.data_as_of AS "dataAsOf"
+             FROM current_notes
+             CROSS JOIN previous_notes`,
+            [...filters.current.params, ...filters.previous.params]
         );
-        res.json({ success: true, data: rows[0], source: 'dashboard_test' });
+        const row = rows[0] || {};
+        res.json({
+            success: true,
+            data: {
+                ...row,
+                changePercent: percentChange(
+                    row.totalNotesGenerated,
+                    row.previousNotesGenerated
+                ),
+            },
+            source: 'dashboard_test',
+        });
     } catch (error) {
         next(error);
     }

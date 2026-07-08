@@ -4,6 +4,7 @@ const app = require('../server');
 const {
     connectDatabase,
     closeDatabases,
+    dashboardPool,
     difyPool,
 } = require('../config/database');
 
@@ -176,6 +177,77 @@ const run = async () => {
     );
     if (Number(filteredTransactions?.value) !== 1) {
         throw new Error('Hierarchy and date filter contract did not affect dashboard metrics');
+    }
+
+    const comparisonRange = await dashboardPool.query(
+        `SELECT
+            TO_CHAR(DATE_TRUNC('month', event_at), 'YYYY-MM-DD') AS start,
+            TO_CHAR(DATE_TRUNC('month', event_at) + INTERVAL '1 month - 1 day', 'YYYY-MM-DD') AS end
+         FROM fact_usage_event
+         GROUP BY DATE_TRUNC('month', event_at)
+         ORDER BY DATE_TRUNC('month', event_at) DESC
+         LIMIT 1`
+    );
+    const range = comparisonRange.rows[0];
+    const comparisonQuery = `?start=${range.start}&end=${range.end}`;
+    const comparisonMetrics = await request(
+        baseUrl,
+        `/api/dashboard/metrics${comparisonQuery}`
+    );
+    for (const metric of comparisonMetrics.data) {
+        const previous = Number(metric.previousValue || 0);
+        const expected = previous
+            ? Number((((Number(metric.value) - previous) / previous) * 100).toFixed(2))
+            : null;
+        if (metric.changePercent !== expected) {
+            throw new Error(`${metric.metricName} comparison is not calculated from live periods`);
+        }
+    }
+
+    const comparisonKPIs = await request(
+        baseUrl,
+        `/api/department/kpis${comparisonQuery}`
+    );
+    const expectedTokenChange = Number(comparisonKPIs.data.previousTokens || 0)
+        ? Number(((
+            (Number(comparisonKPIs.data.totalTokens) - Number(comparisonKPIs.data.previousTokens))
+            / Number(comparisonKPIs.data.previousTokens)
+        ) * 100).toFixed(2))
+        : null;
+    if (comparisonKPIs.data.changes.totalTokens !== expectedTokenChange) {
+        throw new Error('Analytics token comparison is not calculated from live periods');
+    }
+
+    const comparisonCosts = await request(
+        baseUrl,
+        `/api/api-management/costs${comparisonQuery}`
+    );
+    if (
+        Number(comparisonCosts.data.usageChange)
+        !== Number(comparisonCosts.data.currentBillingCycle)
+            - Number(comparisonCosts.data.previousBillingCycle)
+    ) {
+        throw new Error('Consumption Coin change is not calculated from live periods');
+    }
+
+    const comparisonNotes = await request(
+        baseUrl,
+        `/api/behavior/kpi${comparisonQuery}`
+    );
+    const previousNotes = Number(comparisonNotes.data.previousNotesGenerated || 0);
+    const expectedNoteChange = previousNotes
+        ? Number(((
+            (Number(comparisonNotes.data.totalNotesGenerated) - previousNotes)
+            / previousNotes
+        ) * 100).toFixed(2))
+        : null;
+    if (comparisonNotes.data.changePercent !== expectedNoteChange) {
+        throw new Error('Behavior note comparison is not calculated from live periods');
+    }
+
+    const allTimeMetrics = await request(baseUrl, '/api/dashboard/metrics');
+    if (allTimeMetrics.data.some(metric => metric.changePercent !== null)) {
+        throw new Error('All-time metrics must not invent a previous-period comparison');
     }
 
     await request(baseUrl, '/api/sync/schedule', {

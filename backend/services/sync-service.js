@@ -449,13 +449,14 @@ class SyncService {
                 const userKey = userResult.rows[0].user_key;
 
                 let orgKey = null;
-                const campus = info.campus;
+                const campus = info['campus-id'] || info.campus;
+                const campusName = info['ku-campus-en'] || info['ku-campus-th'] || info.campus || campus;
                 const faculty = info['faculty-id'] || info.faculty || info['ku-faculty-en'];
                 const department = info['department-id'] || info.department || info['ku-department-en'];
 
                 if (campus || faculty || department) {
                     const campusKey = campus
-                        ? await this.ensureOrgUnit(client, null, 'campus', `campus:${campus}`, campus)
+                        ? await this.ensureOrgUnit(client, null, 'campus', `campus:${campus}`, campusName)
                         : null;
                     const facultyKey = faculty
                         ? await this.ensureOrgUnit(client, campusKey, 'faculty', `faculty:${faculty}`, info['ku-faculty-en'] || info.faculty || faculty)
@@ -990,6 +991,11 @@ class SyncService {
         try {
             await client.query('BEGIN');
             await client.query('TRUNCATE fact_user_activity_daily, agg_usage_daily, agg_usage_hourly, agg_topic_daily');
+            await client.query(
+                `INSERT INTO dim_model (provider, model_name, normalized_name)
+                 VALUES ('unknown','unknown','unknown')
+                 ON CONFLICT (provider, model_name) DO UPDATE SET updated_at = NOW()`
+            );
 
             await client.query(
                 `INSERT INTO fact_user_activity_daily (

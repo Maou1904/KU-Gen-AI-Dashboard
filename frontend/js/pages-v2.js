@@ -7,8 +7,13 @@ Object.assign(App, {
             current: Number(live.costs.currentBillingCycle || 0),
             projected: Number(live.costs.projectedEndOfMonth || 0),
             change: Number(live.costs.usageChange || 0),
-            caching: live.costs.cachingSavings,
+            changePercent: live.costs.changePercent,
+            previous: Number(live.costs.previousBillingCycle || 0),
+            isProjected: Boolean(live.costs.isProjected),
         };
+        const projectionProgress = costs.projected > 0
+            ? Math.min(100, Math.max(0, (costs.current / costs.projected) * 100))
+            : 0;
         const allRows = live.hierarchy.map(row => ({
             ...row,
             tokensUsed: Number(row.tokensUsed || 0),
@@ -88,8 +93,8 @@ Object.assign(App, {
                             </div>
                         </div>
                         <div class="pt-md border-t border-outline-variant flex justify-between items-center gap-sm">
-                            <span class="font-label-md text-label-md text-tertiary">Projected period total</span>
-                            <span class="font-title-lg text-title-lg text-on-surface text-right">~${costs.projected.toLocaleString(undefined, { maximumFractionDigits: 0 })} Coin</span>
+                            <span class="font-label-md text-label-md text-tertiary">${costs.isProjected ? 'Projected month total' : 'Selected period total'}</span>
+                            <span class="font-title-lg text-title-lg text-on-surface text-right">${costs.isProjected ? '~' : ''}${costs.projected.toLocaleString(undefined, { maximumFractionDigits: 0 })} Coin</span>
                         </div>
                     </section>
 
@@ -97,15 +102,19 @@ Object.assign(App, {
                         <div>
                             <p class="font-label-md text-label-md text-on-surface-variant mb-md">Usage Change</p>
                             <div class="font-headline-lg text-headline-lg text-primary">
-                                ${costs.change > 0 ? '+' : '-'}${Math.abs(costs.change).toLocaleString(undefined, { maximumFractionDigits: 0 })} Coin
+                                ${costs.change > 0 ? '+' : ''}${costs.change.toLocaleString(undefined, { maximumFractionDigits: 0 })} Coin
                             </div>
-                            <span class="font-body-lg text-body-lg text-on-surface-variant">vs previous comparable period</span>
+                            <span class="font-body-lg text-body-lg text-on-surface-variant">${this.formatComparison(costs.changePercent)}</span>
                         </div>
                         <div>
                             <div class="h-2 bg-surface-container-high rounded-full overflow-hidden mb-sm">
-                                <div class="h-full bg-primary rounded-full" style="width:68%"></div>
+                                <div class="h-full bg-primary rounded-full" style="width:${projectionProgress.toFixed(1)}%"></div>
                             </div>
-                            <p class="font-body-md text-body-md text-on-surface-variant">${costs.caching == null ? 'Caching savings data is not available.' : `Caching saved ~${costs.caching}% this period.`}</p>
+                            <p class="font-body-md text-body-md text-on-surface-variant">
+                                ${costs.previous
+                                    ? `Previous period: ${costs.previous.toLocaleString(undefined, { maximumFractionDigits: 0 })} Coin`
+                                    : 'No usage was recorded in the previous period.'}
+                            </p>
                         </div>
                     </section>
                 </div>
@@ -200,6 +209,7 @@ Object.assign(App, {
         const coinTotal = Number(live.kpis.coinConsumption || 0);
         const tokenTotal = Number(live.kpis.totalTokens || 0);
         const activeUsers = Number(live.kpis.activeUsers || 0);
+        const changes = live.kpis.changes || {};
 
         return `
             ${this.createPageHeader(
@@ -217,8 +227,8 @@ Object.assign(App, {
 
             <div class="bento-grid mb-gutter">
                 <div class="col-span-5 grid grid-cols-2 gap-gutter">
-                    ${this.createKPICard('Total Tokens', this.formatCompact(tokenTotal), '+15.3% from previous period', 'token', 'positive')}
-                    ${this.createKPICard('Active Users', activeUsers.toLocaleString(), '+4.2% from previous period', 'group', 'positive')}
+                    ${this.createKPICard('Total Tokens', this.formatCompact(tokenTotal), this.formatComparison(changes.totalTokens), 'token', this.comparisonType(changes.totalTokens))}
+                    ${this.createKPICard('Active Users', activeUsers.toLocaleString(), this.formatComparison(changes.activeUsers), 'group', this.comparisonType(changes.activeUsers))}
                     <section class="col-span-2 rounded-lg p-lg min-h-[190px] border relative overflow-hidden theme-accent-panel">
                         <span class="material-symbols-outlined absolute right-6 top-1/2 -translate-y-1/2 text-[120px] leading-none text-primary/10">toll</span>
                         <div class="relative">
@@ -230,7 +240,7 @@ Object.assign(App, {
                                 ${coinTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                 <span class="text-headline-md">Coin</span>
                             </div>
-                            <p class="font-label-md text-label-md text-on-surface-variant mt-sm">Consumed in the currently selected scope and period</p>
+                            <p class="font-label-md text-label-md text-on-surface-variant mt-sm">${this.formatComparison(changes.coinConsumption)}</p>
                         </div>
                     </section>
                 </div>
@@ -310,7 +320,7 @@ Object.assign(App, {
         const live = this.liveData.behavior;
         const data = {
             totalNotes: Number(live.kpi.totalNotesGenerated || 0),
-            change: 'Live database',
+            changePercent: live.kpi.changePercent,
             tags: live.tags,
             activeUsers: live.dailyUsers.map(item => ({
                 day: new Date(item.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
@@ -339,9 +349,9 @@ Object.assign(App, {
                     </div>
                     <div>
                         <div class="font-display-lg text-display-lg text-primary mb-sm">${data.totalNotes.toLocaleString()}</div>
-                        <div class="font-label-md text-label-md text-primary flex items-center gap-1">
-                            <span class="material-symbols-outlined text-[14px]">${live ? 'database' : 'trending_up'}</span>
-                            ${live ? 'Synced from dashboard database' : `${data.change} vs previous comparable period`}
+                        <div class="font-label-md text-label-md ${this.comparisonType(data.changePercent) === 'negative' ? 'text-error' : 'text-primary'} flex items-center gap-1">
+                            <span class="material-symbols-outlined text-[14px]">${this.comparisonType(data.changePercent) === 'positive' ? 'trending_up' : this.comparisonType(data.changePercent) === 'negative' ? 'trending_down' : 'horizontal_rule'}</span>
+                            ${this.formatComparison(data.changePercent)}
                         </div>
                     </div>
                 </section>
@@ -426,7 +436,7 @@ Object.assign(App, {
                     <div class="grid grid-cols-[260px_minmax(0,1fr)] gap-xl settings-layout">
                         <div>
                             <h3 class="font-title-lg text-title-lg text-on-surface">Appearance</h3>
-                            <p class="font-body-md text-body-md text-on-surface-variant mt-xs">Preview local dashboard preferences. These settings are mock-only.</p>
+                            <p class="font-body-md text-body-md text-on-surface-variant mt-xs">Preferences are saved locally in this browser.</p>
                         </div>
                         <div>
                             <div class="font-label-md text-label-md text-on-surface mb-sm">Accent theme</div>

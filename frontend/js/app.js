@@ -1,4 +1,4 @@
-// Main App Module with interactive filters and mock data.
+// Main App Module with interactive filters and live API data.
 const App = {
     currentPage: 'dashboard',
     apiConnected: false,
@@ -9,15 +9,15 @@ const App = {
         dashboard: {
             filter: {
                 hierarchy: { campuses: [], faculties: [], departments: [] },
-                date: { mode: 'month', month: 6, year: 2026, range: [] },
+                date: { mode: 'all', month: null, year: null, range: [] },
             },
         },
         consumption: {
             filter: {
                 hierarchy: { campuses: [], faculties: [], departments: [] },
-                date: { mode: 'month', month: 6, year: 2026, range: [] },
+                date: { mode: 'all', month: null, year: null, range: [] },
             },
-            selectedYears: ['2026'],
+            selectedYears: [],
             drilldownApp: null,
             hierarchyPage: 1,
             hierarchyPageSize: 7,
@@ -25,7 +25,7 @@ const App = {
         analytics: {
             filter: {
                 hierarchy: { campuses: [], faculties: [], departments: [] },
-                date: { mode: 'month', month: 6, year: 2026, range: [] },
+                date: { mode: 'all', month: null, year: null, range: [] },
             },
             page: 1,
             pageSize: 7,
@@ -33,7 +33,7 @@ const App = {
         behavior: {
             filter: {
                 hierarchy: { campuses: [], faculties: [], departments: [] },
-                date: { mode: 'month', month: 6, year: 2026, range: [] },
+                date: { mode: 'all', month: null, year: null, range: [] },
             },
         },
         settings: {
@@ -60,10 +60,16 @@ const App = {
         const response = await API.healthCheck();
         this.apiConnected = response !== null;
         if (this.apiConnected) {
-            const context = await API.getDashboardMetrics();
-            const dataAsOf = context?.dataAsOf;
-            ['dashboard', 'consumption', 'analytics', 'behavior']
-                .forEach(page => this.applyLiveDataAsOf(page, dataAsOf));
+            const [dashboard, consumption, analytics, behavior] = await Promise.all([
+                API.getDashboardMetrics(),
+                API.getCosts(),
+                API.getDepartmentKPIs(),
+                API.getBehaviorKPI(),
+            ]);
+            this.applyLiveDataAsOf('dashboard', dashboard?.dataAsOf);
+            this.applyLiveDataAsOf('consumption', consumption?.data?.dataAsOf);
+            this.applyLiveDataAsOf('analytics', analytics?.data?.dataAsOf);
+            this.applyLiveDataAsOf('behavior', behavior?.data?.dataAsOf);
         }
         this.updateAPIStatus();
     },
@@ -426,6 +432,9 @@ const App = {
             ...latestDate,
             range: [],
         };
+        if (page === 'consumption' && !this.state.consumption.selectedYears.length) {
+            this.state.consumption.selectedYears = [String(latestDate.year)];
+        }
         this.state[page].liveDateInitialized = true;
     },
 
@@ -444,6 +453,21 @@ const App = {
                 </div>
             </div>
         `;
+    },
+
+    formatComparison(changePercent) {
+        if (changePercent == null || !Number.isFinite(Number(changePercent))) {
+            return 'No previous-period baseline';
+        }
+        const value = Number(changePercent);
+        return `${value > 0 ? '+' : ''}${value.toLocaleString(undefined, {
+            maximumFractionDigits: 2,
+        })}% vs previous period`;
+    },
+
+    comparisonType(changePercent) {
+        if (changePercent == null || Number(changePercent) === 0) return 'neutral';
+        return Number(changePercent) > 0 ? 'positive' : 'negative';
     },
 
     createKPICard(label, value, change, icon, type = 'neutral') {
@@ -747,15 +771,13 @@ const App = {
                     : metric.unit === 'tokens'
                         ? this.formatCompact(numeric)
                         : numeric.toLocaleString();
-                const change = metric.changePercent == null
-                    ? 'Current filtered period'
-                    : `${metric.changePercent >= 0 ? '+' : ''}${metric.changePercent}% vs previous period`;
+                const change = this.formatComparison(metric.changePercent);
                 return {
                     label,
                     value,
                     change,
                     icon,
-                    type: metric.changePercent > 0 ? 'positive' : metric.changePercent < 0 ? 'negative' : 'neutral',
+                    type: this.comparisonType(metric.changePercent),
                 };
             }),
             monthly: live.monthly.map(item => ({
@@ -1141,17 +1163,8 @@ const App = {
             graphite: ['#e5e7e9', '#c9ced2', '#a5adb4', '#737d85', '#343a40'],
         };
         const colors = palettes[this.state.settings.theme] || palettes.forest;
-        const fallbackPattern = [
-            1, 1, 2, 1, 0, 0, 0, 0,
-            3, 4, 3, 4, 2, 2, 2, 2,
-            3, 4, 3, 4, 2, 2, 2, 2,
-            2, 2, 1, 2, 0, 0, 0, 0,
-            2, 2, 1, 2, 0, 0, 0, 0,
-            2, 2, 1, 2, 0, 0, 0, 0,
-            2, 2, 1, 2, 0, 0, 0, 0,
-        ];
-        const values = data ? Array.from({ length: 56 }, () => 0) : null;
-        if (values) {
+        const values = Array.from({ length: 56 }, () => 0);
+        if (Array.isArray(data)) {
             data.forEach(item => {
                 const day = Number(item.day);
                 const hourIndex = Math.floor(Number(item.hour) / 3);
@@ -1160,10 +1173,8 @@ const App = {
                 }
             });
         }
-        const max = values ? Math.max(...values, 1) : 1;
-        const pattern = values
-            ? values.map(value => Math.min(4, Math.floor((value / max) * 4)))
-            : fallbackPattern;
+        const max = Math.max(...values, 1);
+        const pattern = values.map(value => Math.min(4, Math.floor((value / max) * 4)));
         return pattern.map(value => `<div class="w-full h-full min-h-[28px] rounded-sm" style="background-color: ${colors[value]};"></div>`).join('');
     },
 

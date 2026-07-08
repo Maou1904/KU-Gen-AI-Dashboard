@@ -2,6 +2,8 @@ const express = require('express');
 const { dashboardPool } = require('../config/database');
 const {
     usageFilter,
+    comparisonFilters,
+    percentChange,
     usageSource,
     modelUsageSource,
     noteSource,
@@ -9,44 +11,51 @@ const {
 
 const router = express.Router();
 
-const changePercent = (current, previous) => {
-    const a = Number(current || 0);
-    const b = Number(previous || 0);
-    if (!b) return a ? 100 : 0;
-    return Number((((a - b) / b) * 100).toFixed(2));
-};
-
 router.get('/metrics', async (req, res, next) => {
     try {
-        const filter = usageFilter(req);
+        const filters = comparisonFilters(req);
         const { rows } = await dashboardPool.query(
-            `WITH usage_totals AS (
+            `WITH current_usage AS (
                 SELECT
                     COUNT(DISTINCT user_key) AS active_users,
                     SUM(COALESCE(total_coins, 0)) AS coins,
                     COUNT(*) AS transactions,
                     MAX(event_at) AS data_as_of
                 FROM ${usageSource} u
-                WHERE ${filter.sql}
-             ), model_totals AS (
+                WHERE ${filters.current.sql}
+             ), previous_usage AS (
+                SELECT
+                    COUNT(DISTINCT user_key) AS active_users,
+                    SUM(COALESCE(total_coins, 0)) AS coins,
+                    COUNT(*) AS transactions
+                FROM ${usageSource} u
+                WHERE ${filters.previous.sql}
+             ), current_model AS (
                 SELECT
                     SUM(total_tokens) AS tokens,
                     MAX(event_at) AS data_as_of
                 FROM ${modelUsageSource} u
-                WHERE ${filter.sql}
+                WHERE ${filters.current.sql}
+             ), previous_model AS (
+                SELECT SUM(total_tokens) AS tokens
+                FROM ${modelUsageSource} u
+                WHERE ${filters.previous.sql}
              )
              SELECT
-                usage_totals.active_users,
-                0::bigint AS previous_active_users,
-                model_totals.tokens,
-                0::bigint AS previous_tokens,
-                usage_totals.coins,
-                0::numeric AS previous_coins,
-                usage_totals.transactions,
-                0::bigint AS previous_transactions,
-                GREATEST(usage_totals.data_as_of, model_totals.data_as_of) AS data_as_of
-             FROM usage_totals CROSS JOIN model_totals`,
-            filter.params
+                current_usage.active_users,
+                previous_usage.active_users AS previous_active_users,
+                current_model.tokens,
+                previous_model.tokens AS previous_tokens,
+                current_usage.coins,
+                previous_usage.coins AS previous_coins,
+                current_usage.transactions,
+                previous_usage.transactions AS previous_transactions,
+                GREATEST(current_usage.data_as_of, current_model.data_as_of) AS data_as_of
+             FROM current_usage
+             CROSS JOIN previous_usage
+             CROSS JOIN current_model
+             CROSS JOIN previous_model`,
+            [...filters.current.params, ...filters.previous.params]
         );
         const row = rows[0] || {};
         const data = [
@@ -58,7 +67,7 @@ router.get('/metrics', async (req, res, next) => {
             metricName,
             value: Number(value || 0),
             previousValue: Number(previousValue || 0),
-            changePercent: Number(previousValue || 0) ? changePercent(value, previousValue) : null,
+            changePercent: percentChange(value, previousValue),
             unit,
         }));
         res.json({ success: true, data, dataAsOf: row.data_as_of, source: 'dashboard_test' });

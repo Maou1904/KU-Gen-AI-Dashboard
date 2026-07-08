@@ -1,7 +1,6 @@
 /**
  * API Service Module
  * Handles all API calls to the backend server
- * Falls back to mock data if backend is unavailable
  */
 
 const API = {

@@ -2,6 +2,8 @@ const express = require('express');
 const { dashboardPool } = require('../config/database');
 const {
     usageFilter,
+    comparisonFilters,
+    percentChange,
     usageSource,
     modelUsageSource,
 } = require('./filter-utils');
@@ -156,31 +158,69 @@ router.get('/hierarchy', async (req, res, next) => {
 
 router.get('/costs', async (req, res, next) => {
     try {
-        const filter = usageFilter(req);
+        const filters = comparisonFilters(req);
         const { rows } = await dashboardPool.query(
-            `WITH coin_usage AS (
+            `WITH current_usage AS (
                 SELECT
                     MAX(event_at) AS data_as_of,
                     SUM(COALESCE(total_coins, 0)) AS current_coins
                 FROM ${usageSource} u
-                WHERE ${filter.sql}
+                WHERE ${filters.current.sql}
+             ), previous_usage AS (
+                SELECT SUM(COALESCE(total_coins, 0)) AS previous_coins
+                FROM ${usageSource} u
+                WHERE ${filters.previous.sql}
              )
              SELECT
                 current_coins AS "currentBillingCycle",
-                CASE
-                    WHEN EXTRACT(DAY FROM data_as_of) > 0
-                    THEN current_coins / EXTRACT(DAY FROM data_as_of)
-                         * EXTRACT(DAY FROM (DATE_TRUNC('month', data_as_of) + INTERVAL '1 month - 1 day'))
-                    ELSE 0
-                END AS "projectedEndOfMonth",
-                0::numeric AS "usageChange",
-                NULL::numeric AS "cachingSavings",
+                previous_coins AS "previousBillingCycle",
+                current_coins - previous_coins AS "usageChange",
                 'Coin' AS unit,
                 data_as_of AS "dataAsOf"
-             FROM coin_usage`,
-            filter.params
+             FROM current_usage
+             CROSS JOIN previous_usage`,
+            [...filters.current.params, ...filters.previous.params]
         );
-        res.json({ success: true, data: rows[0] || {}, source: 'dashboard_test' });
+        const row = rows[0] || {};
+        const currentCoins = Number(row.currentBillingCycle || 0);
+        const dataAsOf = row.dataAsOf ? new Date(row.dataAsOf) : null;
+        const today = new Date();
+        const selectedStart = req.query.start ? new Date(`${req.query.start}T00:00:00Z`) : null;
+        const selectedEnd = req.query.end ? new Date(`${req.query.end}T23:59:59Z`) : null;
+        const isCurrentMonth = Boolean(
+            dataAsOf
+            && selectedStart
+            && selectedEnd
+            && selectedEnd >= today
+            && selectedStart.getUTCDate() === 1
+            && selectedStart.getUTCFullYear() === dataAsOf.getUTCFullYear()
+            && selectedStart.getUTCMonth() === dataAsOf.getUTCMonth()
+            && dataAsOf.getUTCFullYear() === today.getUTCFullYear()
+            && dataAsOf.getUTCMonth() === today.getUTCMonth()
+        );
+        const daysInMonth = dataAsOf
+            ? new Date(Date.UTC(
+                dataAsOf.getUTCFullYear(),
+                dataAsOf.getUTCMonth() + 1,
+                0
+            )).getUTCDate()
+            : 0;
+        const projectedEndOfMonth = isCurrentMonth && dataAsOf.getUTCDate() > 0
+            ? currentCoins / dataAsOf.getUTCDate() * daysInMonth
+            : currentCoins;
+        res.json({
+            success: true,
+            data: {
+                ...row,
+                projectedEndOfMonth,
+                isProjected: isCurrentMonth,
+                changePercent: percentChange(
+                    row.currentBillingCycle,
+                    row.previousBillingCycle
+                ),
+            },
+            source: 'dashboard_test',
+        });
     } catch (error) {
         next(error);
     }

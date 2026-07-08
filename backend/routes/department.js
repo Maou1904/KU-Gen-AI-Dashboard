@@ -1,6 +1,12 @@
 const express = require('express');
 const { dashboardPool } = require('../config/database');
-const { usageFilter, usageSource, modelUsageSource } = require('./filter-utils');
+const {
+    usageFilter,
+    comparisonFilters,
+    percentChange,
+    usageSource,
+    modelUsageSource,
+} = require('./filter-utils');
 
 const router = express.Router();
 
@@ -66,34 +72,68 @@ router.get('/summary', async (req, res, next) => {
 
 router.get('/kpis', async (req, res, next) => {
     try {
-        const filter = usageFilter(req);
+        const filters = comparisonFilters(req);
         const { rows } = await dashboardPool.query(
-            `WITH usage_totals AS (
+            `WITH current_usage AS (
                 SELECT
                     COUNT(*)::bigint AS transactions,
                     COUNT(DISTINCT user_key)::bigint AS active_users,
                     SUM(COALESCE(total_coins, 0)) AS coin_consumption,
                     MAX(event_at) AS data_as_of
                 FROM ${usageSource} u
-                WHERE ${filter.sql}
-             ), model_totals AS (
+                WHERE ${filters.current.sql}
+             ), previous_usage AS (
+                SELECT
+                    COUNT(*)::bigint AS transactions,
+                    COUNT(DISTINCT user_key)::bigint AS active_users,
+                    SUM(COALESCE(total_coins, 0)) AS coin_consumption
+                FROM ${usageSource} u
+                WHERE ${filters.previous.sql}
+             ), current_model AS (
                 SELECT
                     SUM(total_tokens)::bigint AS tokens,
                     MAX(event_at) AS data_as_of
                 FROM ${modelUsageSource} u
-                WHERE ${filter.sql}
+                WHERE ${filters.current.sql}
+             ), previous_model AS (
+                SELECT SUM(total_tokens)::bigint AS tokens
+                FROM ${modelUsageSource} u
+                WHERE ${filters.previous.sql}
              )
              SELECT
-                usage_totals.transactions AS "totalTransactions",
-                usage_totals.active_users AS "activeUsers",
-                model_totals.tokens AS "totalTokens",
-                usage_totals.coin_consumption AS "coinConsumption",
+                current_usage.transactions AS "totalTransactions",
+                current_usage.active_users AS "activeUsers",
+                current_model.tokens AS "totalTokens",
+                current_usage.coin_consumption AS "coinConsumption",
+                previous_usage.transactions AS "previousTransactions",
+                previous_usage.active_users AS "previousActiveUsers",
+                previous_model.tokens AS "previousTokens",
+                previous_usage.coin_consumption AS "previousCoinConsumption",
                 'Coin' AS unit,
-                GREATEST(usage_totals.data_as_of, model_totals.data_as_of) AS "dataAsOf"
-             FROM usage_totals CROSS JOIN model_totals`,
-            filter.params
+                GREATEST(current_usage.data_as_of, current_model.data_as_of) AS "dataAsOf"
+             FROM current_usage
+             CROSS JOIN previous_usage
+             CROSS JOIN current_model
+             CROSS JOIN previous_model`,
+            [...filters.current.params, ...filters.previous.params]
         );
-        res.json({ success: true, data: rows[0], source: 'dashboard_test' });
+        const row = rows[0] || {};
+        res.json({
+            success: true,
+            data: {
+                ...row,
+                changes: {
+                    totalTransactions: percentChange(row.totalTransactions, row.previousTransactions),
+                    activeUsers: percentChange(row.activeUsers, row.previousActiveUsers),
+                    totalTokens: percentChange(row.totalTokens, row.previousTokens),
+                    coinConsumption: percentChange(
+                        row.coinConsumption,
+                        row.previousCoinConsumption
+                    ),
+                },
+            },
+            source: 'dashboard_test',
+        });
     } catch (error) {
         next(error);
     }

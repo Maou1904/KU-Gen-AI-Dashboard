@@ -1,0 +1,486 @@
+{
+  "version": "2026-07-08",
+  "description": "Kasetsart University org catalog for source demo simulation. Campus/faculty list is based on the public KU organization list; faculty units are primarily from KUforest Department pages and official faculty pages where KUforest is incomplete.",
+  "sources": [
+    {
+      "label": "KU organization overview",
+      "url": "https://th.wikipedia.org/wiki/มหาวิทยาลัยเกษตรศาสตร์"
+    },
+    {
+      "label": "KUforest department/unit pages",
+      "url": "https://research.ku.ac.th/forest/Department.aspx"
+    }
+  ],
+  "campuses": [
+    {
+      "id": "bangkhen",
+      "nameTh": "วิทยาเขตบางเขน",
+      "faculties": [
+        {
+          "id": "bangkhen-agriculture",
+          "nameTh": "คณะเกษตร",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=01&FacultyID=02",
+          "units": [
+            { "id": "bangkhen-agriculture-entomology", "nameTh": "ภาควิชากีฏวิทยา", "unitType": "department" },
+            { "id": "bangkhen-agriculture-farm-mechanics", "nameTh": "ภาควิชาเกษตรกลวิธาน", "unitType": "department" },
+            { "id": "bangkhen-agriculture-home-economics", "nameTh": "ภาควิชาคหกรรมศาสตร์", "unitType": "department" },
+            { "id": "bangkhen-agriculture-soil-science", "nameTh": "ภาควิชาปฐพีวิทยา", "unitType": "department" },
+            { "id": "bangkhen-agriculture-agronomy", "nameTh": "ภาควิชาพืชไร่นา", "unitType": "department" },
+            { "id": "bangkhen-agriculture-horticulture", "nameTh": "ภาควิชาพืชสวน", "unitType": "department" },
+            { "id": "bangkhen-agriculture-plant-pathology", "nameTh": "ภาควิชาโรคพืช", "unitType": "department" },
+            { "id": "bangkhen-agriculture-extension", "nameTh": "ภาควิชาส่งเสริมและนิเทศศาสตร์เกษตร", "unitType": "department" },
+            { "id": "bangkhen-agriculture-animal-science", "nameTh": "ภาควิชาสัตวบาล", "unitType": "department" },
+            { "id": "bangkhen-agriculture-corn-sorghum-research", "nameTh": "ศูนย์วิจัยข้าวโพดและข้าวฟ่างแห่งชาติ", "unitType": "center" },
+            { "id": "bangkhen-agriculture-research-transfer", "nameTh": "ศูนย์วิจัยและถ่ายทอดเทคโนโลยีการเกษตร", "unitType": "center" },
+            { "id": "bangkhen-agriculture-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "bangkhen-fisheries",
+          "nameTh": "คณะประมง",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=01&FacultyID=03",
+          "units": [
+            { "id": "bangkhen-fisheries-management", "nameTh": "ภาควิชาการจัดการประมง", "unitType": "department" },
+            { "id": "bangkhen-fisheries-biology", "nameTh": "ภาควิชาชีววิทยาประมง", "unitType": "department" },
+            { "id": "bangkhen-fisheries-products", "nameTh": "ภาควิชาผลิตภัณฑ์ประมง", "unitType": "department" },
+            { "id": "bangkhen-fisheries-aquaculture", "nameTh": "ภาควิชาเพาะเลี้ยงสัตว์น้ำ", "unitType": "department" },
+            { "id": "bangkhen-fisheries-marine-science", "nameTh": "ภาควิชาวิทยาศาสตร์ทางทะเล", "unitType": "department" },
+            { "id": "bangkhen-fisheries-research-admin", "nameTh": "ศูนย์บริหารงานวิจัยและสนับสนุนวิชาการ", "unitType": "center" },
+            { "id": "bangkhen-fisheries-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "bangkhen-forestry",
+          "nameTh": "คณะวนศาสตร์",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=01&FacultyID=04",
+          "units": [
+            { "id": "bangkhen-forestry-management", "nameTh": "ภาควิชาการจัดการป่าไม้", "unitType": "department" },
+            { "id": "bangkhen-forestry-biology", "nameTh": "ภาควิชาชีววิทยาป่าไม้", "unitType": "department" },
+            { "id": "bangkhen-forestry-products", "nameTh": "ภาควิชาวนผลิตภัณฑ์", "unitType": "department" },
+            { "id": "bangkhen-forestry-silviculture", "nameTh": "ภาควิชาวนวัฒนวิทยา", "unitType": "department" },
+            { "id": "bangkhen-forestry-engineering", "nameTh": "ภาควิชาวิศวกรรมป่าไม้", "unitType": "department" },
+            { "id": "bangkhen-forestry-conservation", "nameTh": "ภาควิชาอนุรักษ์วิทยา", "unitType": "department" },
+            { "id": "bangkhen-forestry-research-center", "nameTh": "ศูนย์วิจัยป่าไม้", "unitType": "center" },
+            { "id": "bangkhen-forestry-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "bangkhen-science",
+          "nameTh": "คณะวิทยาศาสตร์",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=01&FacultyID=05",
+          "units": [
+            { "id": "bangkhen-science-mathematics", "nameTh": "ภาควิชาคณิตศาสตร์", "unitType": "department" },
+            { "id": "bangkhen-science-chemistry", "nameTh": "ภาควิชาเคมี", "unitType": "department" },
+            { "id": "bangkhen-science-microbiology", "nameTh": "ภาควิชาจุลชีววิทยา", "unitType": "department" },
+            { "id": "bangkhen-science-biochemistry", "nameTh": "ภาควิชาชีวเคมี", "unitType": "department" },
+            { "id": "bangkhen-science-botany", "nameTh": "ภาควิชาพฤกษศาสตร์", "unitType": "department" },
+            { "id": "bangkhen-science-genetics", "nameTh": "ภาควิชาพันธุศาสตร์", "unitType": "department" },
+            { "id": "bangkhen-science-physics", "nameTh": "ภาควิชาฟิสิกส์", "unitType": "department" },
+            { "id": "bangkhen-science-applied-radiation-isotope", "nameTh": "ภาควิชารังสีประยุกต์และไอโซโทป", "unitType": "department" },
+            { "id": "bangkhen-science-materials-science", "nameTh": "ภาควิชาวัสดุศาสตร์", "unitType": "department" },
+            { "id": "bangkhen-science-computer-science", "nameTh": "ภาควิชาวิทยาการคอมพิวเตอร์", "unitType": "department" },
+            { "id": "bangkhen-science-earth-science", "nameTh": "ภาควิชาวิทยาศาสตร์พื้นพิภพ", "unitType": "department" },
+            { "id": "bangkhen-science-statistics", "nameTh": "ภาควิชาสถิติ", "unitType": "department" },
+            { "id": "bangkhen-science-zoology", "nameTh": "ภาควิชาสัตววิทยา", "unitType": "department" },
+            { "id": "bangkhen-science-nuclear-technology-center", "nameTh": "ศูนย์วิจัยนิวเคลียร์เทคโนโลยี คณะวิทยาศาสตร์", "unitType": "center" },
+            { "id": "bangkhen-science-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "bangkhen-engineering",
+          "nameTh": "คณะวิศวกรรมศาสตร์",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=01&FacultyID=06",
+          "units": [
+            { "id": "bangkhen-engineering-aerospace", "nameTh": "ภาควิชาวิศวกรรมการบินและอวกาศ", "unitType": "department" },
+            { "id": "bangkhen-engineering-computer", "nameTh": "ภาควิชาวิศวกรรมคอมพิวเตอร์", "unitType": "department" },
+            { "id": "bangkhen-engineering-chemical", "nameTh": "ภาควิชาวิศวกรรมเคมี", "unitType": "department" },
+            { "id": "bangkhen-engineering-mechanical", "nameTh": "ภาควิชาวิศวกรรมเครื่องกล", "unitType": "department" },
+            { "id": "bangkhen-engineering-water-resources", "nameTh": "ภาควิชาวิศวกรรมทรัพยากรน้ำ", "unitType": "department" },
+            { "id": "bangkhen-engineering-electrical", "nameTh": "ภาควิชาวิศวกรรมไฟฟ้า", "unitType": "department" },
+            { "id": "bangkhen-engineering-civil", "nameTh": "ภาควิชาวิศวกรรมโยธา", "unitType": "department" },
+            { "id": "bangkhen-engineering-materials", "nameTh": "ภาควิชาวิศวกรรมวัสดุ", "unitType": "department" },
+            { "id": "bangkhen-engineering-environmental", "nameTh": "ภาควิชาวิศวกรรมสิ่งแวดล้อม", "unitType": "department" },
+            { "id": "bangkhen-engineering-industrial", "nameTh": "ภาควิชาวิศวกรรมอุตสาหการ", "unitType": "department" },
+            { "id": "bangkhen-engineering-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "bangkhen-education",
+          "nameTh": "คณะศึกษาศาสตร์",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=01&FacultyID=07",
+          "units": [
+            { "id": "bangkhen-education-education", "nameTh": "ภาควิชาการศึกษา", "unitType": "department" },
+            { "id": "bangkhen-education-psychology-guidance", "nameTh": "ภาควิชาจิตวิทยาการศึกษาและการแนะแนว", "unitType": "department" },
+            { "id": "bangkhen-education-educational-technology", "nameTh": "ภาควิชาเทคโนโลยีการศึกษา", "unitType": "department" },
+            { "id": "bangkhen-education-physical-education", "nameTh": "ภาควิชาพลศึกษา", "unitType": "department" },
+            { "id": "bangkhen-education-vocational-education", "nameTh": "ภาควิชาอาชีวศึกษา", "unitType": "department" },
+            { "id": "bangkhen-education-demonstration-school", "nameTh": "โรงเรียนสาธิตแห่งมหาวิทยาลัยเกษตรศาสตร์", "unitType": "school" },
+            { "id": "bangkhen-education-special-education-center", "nameTh": "ศูนย์ศึกษาและพัฒนาการจัดการศึกษาพิเศษ ''คุณพุ่ม''", "unitType": "center" },
+            { "id": "bangkhen-education-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "bangkhen-economics",
+          "nameTh": "คณะเศรษฐศาสตร์",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=01&FacultyID=08",
+          "units": [
+            { "id": "bangkhen-economics-economics", "nameTh": "ภาควิชาเศรษฐศาสตร์", "unitType": "department" },
+            { "id": "bangkhen-economics-agricultural-resource", "nameTh": "ภาควิชาเศรษฐศาสตร์เกษตรและทรัพยากร", "unitType": "department" },
+            { "id": "bangkhen-economics-cooperatives", "nameTh": "ภาควิชาสหกรณ์", "unitType": "department" },
+            { "id": "bangkhen-economics-cooperative-institute", "nameTh": "สถาบันวิชาการด้านสหกรณ์", "unitType": "institute" },
+            { "id": "bangkhen-economics-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "bangkhen-social-sciences",
+          "nameTh": "คณะสังคมศาสตร์",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=01&FacultyID=09",
+          "units": [
+            { "id": "bangkhen-social-psychology", "nameTh": "ภาควิชาจิตวิทยา", "unitType": "department" },
+            { "id": "bangkhen-social-law", "nameTh": "ภาควิชานิติศาสตร์", "unitType": "department" },
+            { "id": "bangkhen-social-history", "nameTh": "ภาควิชาประวัติศาสตร์", "unitType": "department" },
+            { "id": "bangkhen-social-geography", "nameTh": "ภาควิชาภูมิศาสตร์", "unitType": "department" },
+            { "id": "bangkhen-social-political-public-admin", "nameTh": "ภาควิชารัฐศาสตร์และรัฐประศาสนศาสตร์", "unitType": "department" },
+            { "id": "bangkhen-social-sociology-anthropology", "nameTh": "ภาควิชาสังคมวิทยาและมานุษยวิทยา", "unitType": "department" },
+            { "id": "bangkhen-social-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "bangkhen-veterinary-medicine",
+          "nameTh": "คณะสัตวแพทยศาสตร์",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=01&FacultyID=10",
+          "units": [
+            { "id": "bangkhen-vet-anatomy", "nameTh": "ภาควิชากายวิภาคศาสตร์", "unitType": "department" },
+            { "id": "bangkhen-vet-microbiology-immunology", "nameTh": "ภาควิชาจุลชีววิทยาและวิทยาภูมิคุ้มกัน", "unitType": "department" },
+            { "id": "bangkhen-vet-parasitology", "nameTh": "ภาควิชาปรสิตวิทยา", "unitType": "department" },
+            { "id": "bangkhen-vet-pathology", "nameTh": "ภาควิชาพยาธิวิทยา", "unitType": "department" },
+            { "id": "bangkhen-vet-pharmacology", "nameTh": "ภาควิชาเภสัชวิทยา", "unitType": "department" },
+            { "id": "bangkhen-vet-companion-clinical", "nameTh": "ภาควิชาเวชศาสตร์คลินิกสัตว์เลี้ยง", "unitType": "department" },
+            { "id": "bangkhen-vet-large-wildlife-clinical", "nameTh": "ภาควิชาเวชศาสตร์คลีนิคสัตว์ใหญ่และสัตว์ป่า", "unitType": "department" },
+            { "id": "bangkhen-vet-production-resources", "nameTh": "ภาควิชาเวชศาสตร์และทรัพยากรการผลิตสัตว์", "unitType": "department" },
+            { "id": "bangkhen-vet-physiology", "nameTh": "ภาควิชาสรีรวิทยา", "unitType": "department" },
+            { "id": "bangkhen-vet-public-health-diagnostic", "nameTh": "ภาควิชาสัตวแพทยสาธารณสุขศาสตร์ และการบริการวินิจฉัย", "unitType": "department" },
+            { "id": "bangkhen-vet-hospital-bangkhen", "nameTh": "โรงพยาบาลสัตว์ บางเขน", "unitType": "hospital" },
+            { "id": "bangkhen-vet-diagnostic-bangkhen", "nameTh": "ศูนย์ชันสูตรโรคสัตว์ บางเขน", "unitType": "center" },
+            { "id": "bangkhen-vet-research-innovation", "nameTh": "ศูนย์วิจัยและนวัตกรรมทางสัตวแพทย์", "unitType": "center" },
+            { "id": "bangkhen-vet-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "bangkhen-agro-industry",
+          "nameTh": "คณะอุตสาหกรรมเกษตร",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=01&FacultyID=15",
+          "units": [
+            { "id": "bangkhen-agro-packaging-materials", "nameTh": "ภาควิชาเทคโนโลยีการบรรจุและวัสดุ", "unitType": "department" },
+            { "id": "bangkhen-agro-biotechnology", "nameTh": "ภาควิชาเทคโนโลยีชีวภาพ", "unitType": "department" },
+            { "id": "bangkhen-agro-industrial-technology", "nameTh": "ภาควิชาเทคโนโลยีอุตสาหกรรมเกษตร", "unitType": "department" },
+            { "id": "bangkhen-agro-product-development", "nameTh": "ภาควิชาพัฒนาผลิตภัณฑ์", "unitType": "department" },
+            { "id": "bangkhen-agro-textile-science", "nameTh": "ภาควิชาวิทยาการสิ่งทอ", "unitType": "department" },
+            { "id": "bangkhen-agro-food-science-technology", "nameTh": "ภาควิชาวิทยาศาสตร์และเทคโนโลยีการอาหาร", "unitType": "department" },
+            { "id": "bangkhen-agro-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "bangkhen-humanities",
+          "nameTh": "คณะมนุษยศาสตร์",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=01&FacultyID=16",
+          "units": [
+            { "id": "bangkhen-humanities-music", "nameTh": "ภาควิชาดนตรี", "unitType": "department" },
+            { "id": "bangkhen-humanities-communication-information", "nameTh": "ภาควิชานิเทศศาสตร์และสารสนเทศศาสตร์", "unitType": "department" },
+            { "id": "bangkhen-humanities-philosophy-religion", "nameTh": "ภาควิชาปรัชญาและศาสนา", "unitType": "department" },
+            { "id": "bangkhen-humanities-eastern-languages", "nameTh": "ภาควิชาภาษาตะวันออก", "unitType": "department" },
+            { "id": "bangkhen-humanities-foreign-languages", "nameTh": "ภาควิชาภาษาต่างประเทศ", "unitType": "department" },
+            { "id": "bangkhen-humanities-thai-language", "nameTh": "ภาควิชาภาษาไทย", "unitType": "department" },
+            { "id": "bangkhen-humanities-linguistics", "nameTh": "ภาควิชาภาษาศาสตร์", "unitType": "department" },
+            { "id": "bangkhen-humanities-literature", "nameTh": "ภาควิชาวรรณคดี", "unitType": "department" },
+            { "id": "bangkhen-humanities-tourism-hospitality", "nameTh": "ภาควิชาอุตสาหกรรมท่องเที่ยวและบริการ", "unitType": "department" },
+            { "id": "bangkhen-humanities-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "bangkhen-business-administration",
+          "nameTh": "คณะบริหารธุรกิจ",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=01&FacultyID=28",
+          "units": [
+            { "id": "bangkhen-business-finance", "nameTh": "ภาควิชาการเงิน", "unitType": "department" },
+            { "id": "bangkhen-business-management", "nameTh": "ภาควิชาการจัดการ", "unitType": "department" },
+            { "id": "bangkhen-business-technology-operations", "nameTh": "ภาควิชาการจัดการเทคโนโลยีและการปฏิบัติการ", "unitType": "department" },
+            { "id": "bangkhen-business-marketing", "nameTh": "ภาควิชาการตลาด", "unitType": "department" },
+            { "id": "bangkhen-business-accounting", "nameTh": "ภาควิชาการบัญชี", "unitType": "department" },
+            { "id": "bangkhen-business-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "bangkhen-architecture",
+          "nameTh": "คณะสถาปัตยกรรมศาสตร์",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=01&FacultyID=32",
+          "units": [
+            { "id": "bangkhen-architecture-urban-environmental-planning", "nameTh": "สาขาวิชาการวางผังเมืองและสภาพแวดล้อม", "unitType": "branch" },
+            { "id": "bangkhen-architecture-building-technology", "nameTh": "สาขาวิชาเทคโนโลยีทางอาคาร", "unitType": "branch" },
+            { "id": "bangkhen-architecture-landscape", "nameTh": "สาขาวิชาภูมิสถาปัตยกรรม", "unitType": "branch" },
+            { "id": "bangkhen-architecture-architecture", "nameTh": "สาขาวิชาสถาปัตยกรรม", "unitType": "branch" },
+            { "id": "bangkhen-architecture-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "bangkhen-environment",
+          "nameTh": "คณะสิ่งแวดล้อม",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=01&FacultyID=36",
+          "units": [
+            { "id": "bangkhen-environment-technology-management", "nameTh": "ภาควิชาเทคโนโลยีและการจัดการสิ่งแวดล้อม", "unitType": "department" },
+            { "id": "bangkhen-environment-science", "nameTh": "ภาควิชาวิทยาศาสตร์สิ่งแวดล้อม", "unitType": "department" },
+            { "id": "bangkhen-environment-sustainability", "nameTh": "ภาควิชาสิ่งแวดล้อมเพื่อความยั่งยืน", "unitType": "department" },
+            { "id": "bangkhen-environment-research-service", "nameTh": "ศูนย์วิจัยและบริการวิชาการสิ่งแวดล้อม", "unitType": "center" },
+            { "id": "bangkhen-environment-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "bangkhen-veterinary-technology",
+          "nameTh": "คณะเทคนิคการสัตวแพทย์",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=01&FacultyID=38",
+          "units": [
+            { "id": "bangkhen-vettech-veterinary-nursing", "nameTh": "ภาควิชาการพยาบาลทางสัตวแพทย์", "unitType": "department" },
+            { "id": "bangkhen-vettech-veterinary-technology", "nameTh": "ภาควิชาเทคนิคการสัตวแพทย์", "unitType": "department" },
+            { "id": "bangkhen-vettech-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "bangkhen-integrated-science-college",
+          "nameTh": "วิทยาลัยบูรณาการศาสตร์",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=01&FacultyID=81",
+          "units": [
+            { "id": "bangkhen-integrated-science-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "bangkhen-medicine",
+          "nameTh": "คณะแพทยศาสตร์",
+          "sourceUrl": "https://medicine.ku.ac.th/",
+          "units": []
+        },
+        {
+          "id": "bangkhen-nursing",
+          "nameTh": "คณะพยาบาลศาสตร์",
+          "sourceUrl": "https://nurse.ku.ac.th/",
+          "units": []
+        },
+        {
+          "id": "bangkhen-pharmacy",
+          "nameTh": "คณะเภสัชศาสตร์",
+          "sourceUrl": "https://pharm.ku.ac.th/",
+          "units": []
+        }
+      ]
+    },
+    {
+      "id": "kamphaeng-saen",
+      "nameTh": "วิทยาเขตกำแพงแสน",
+      "faculties": [
+        {
+          "id": "kamphaeng-saen-agriculture",
+          "nameTh": "คณะเกษตร กำแพงแสน",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=02&FacultyID=56",
+          "units": [
+            { "id": "kps-agriculture-entomology", "nameTh": "ภาควิชากีฏวิทยา", "unitType": "department" },
+            { "id": "kps-agriculture-farm-mechanics", "nameTh": "ภาควิชาเกษตรกลวิธาน", "unitType": "department" },
+            { "id": "kps-agriculture-soil-science", "nameTh": "ภาควิชาปฐพีวิทยา", "unitType": "department" },
+            { "id": "kps-agriculture-agronomy", "nameTh": "ภาควิชาพืชไร่นา", "unitType": "department" },
+            { "id": "kps-agriculture-horticulture", "nameTh": "ภาควิชาพืชสวน", "unitType": "department" },
+            { "id": "kps-agriculture-plant-pathology", "nameTh": "ภาควิชาโรคพืช", "unitType": "department" },
+            { "id": "kps-agriculture-extension", "nameTh": "ภาควิชาส่งเสริมและนิเทศศาสตร์เกษตร", "unitType": "department" },
+            { "id": "kps-agriculture-animal-science", "nameTh": "ภาควิชาสัตวบาล", "unitType": "department" },
+            { "id": "kps-agriculture-nongpho-hospital", "nameTh": "โรงพยาบาลสัตว์หนองโพ", "unitType": "hospital" },
+            { "id": "kps-agriculture-research-service", "nameTh": "ศูนย์วิจัยและบริการวิชาการ", "unitType": "center" }
+          ]
+        },
+        {
+          "id": "kamphaeng-saen-engineering",
+          "nameTh": "คณะวิศวกรรมศาสตร์ กำแพงแสน",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=02&FacultyID=57",
+          "units": [
+            { "id": "kps-engineering-food", "nameTh": "ภาควิชาวิศวกรรมการอาหาร", "unitType": "department" },
+            { "id": "kps-engineering-agricultural", "nameTh": "ภาควิชาวิศวกรรมเกษตร", "unitType": "department" },
+            { "id": "kps-engineering-computer", "nameTh": "ภาควิชาวิศวกรรมคอมพิวเตอร์", "unitType": "department" },
+            { "id": "kps-engineering-mechanical", "nameTh": "ภาควิชาวิศวกรรมเครื่องกล", "unitType": "department" },
+            { "id": "kps-engineering-irrigation", "nameTh": "ภาควิชาวิศวกรรมชลประทาน", "unitType": "department" },
+            { "id": "kps-engineering-civil", "nameTh": "ภาควิชาวิศวกรรมโยธา", "unitType": "department" },
+            { "id": "kps-engineering-industrial", "nameTh": "ภาควิชาวิศวกรรมอุตสาหการ", "unitType": "department" },
+            { "id": "kps-engineering-agricultural-machinery-center", "nameTh": "ศูนย์เครื่องจักรกลการเกษตรแห่งชาติ", "unitType": "center" },
+            { "id": "kps-engineering-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "kamphaeng-saen-education-development",
+          "nameTh": "คณะศึกษาศาสตร์และพัฒนศาสตร์",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=02&FacultyID=58",
+          "units": [
+            { "id": "kps-education-human-community-development", "nameTh": "ภาควิชาการพัฒนาทรัพยากรมนุษย์และชุมชน", "unitType": "department" },
+            { "id": "kps-education-teacher-education", "nameTh": "ภาควิชาครุศึกษา", "unitType": "department" },
+            { "id": "kps-education-physical-sport", "nameTh": "ภาควิชาพลศึกษาและกีฬา", "unitType": "department" },
+            { "id": "kps-education-demonstration-school", "nameTh": "โรงเรียนสาธิตแห่งมหาวิทยาลัยเกษตรศาสตร์", "unitType": "school" },
+            { "id": "kps-education-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "kamphaeng-saen-liberal-arts-science",
+          "nameTh": "คณะศิลปศาสตร์และวิทยาศาสตร์",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=02&FacultyID=30",
+          "units": [
+            { "id": "kps-las-business-accounting", "nameTh": "ภาควิชาบริหารธุรกิจและการบัญชี", "unitType": "department" },
+            { "id": "kps-las-computing-digital", "nameTh": "ภาควิชาวิทยาการคำนวณและเทคโนโลยีดิจิทัล", "unitType": "department" },
+            { "id": "kps-las-language-culture", "nameTh": "ภาควิชาวิทยาการภาษาและวัฒนธรรม", "unitType": "department" },
+            { "id": "kps-las-physical-materials-science", "nameTh": "ภาควิชาวิทยาศาสตร์กายภาพและวัสดุศาสตร์", "unitType": "department" },
+            { "id": "kps-las-biological-innovation", "nameTh": "ภาควิชาวิทยาศาสตร์และนวัตกรรมชีวภาพ", "unitType": "department" },
+            { "id": "kps-las-social-sciences", "nameTh": "ภาควิชาสังคมศาสตร์", "unitType": "department" }
+          ]
+        },
+        {
+          "id": "kamphaeng-saen-hospitality-industry",
+          "nameTh": "คณะอุตสาหกรรมบริการ",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=02&FacultyID=82",
+          "units": [
+            { "id": "kps-hospitality-tourism-aviation", "nameTh": "ภาควิชาธุรกิจท่องเที่ยวและการบิน", "unitType": "department" },
+            { "id": "kps-hospitality-hotel-mice", "nameTh": "ภาควิชาธุรกิจโรงแรมและไมซ์", "unitType": "department" },
+            { "id": "kps-hospitality-service-innovation", "nameTh": "ภาควิชานวัตกรรมบริการและการสื่อสารระหว่างวัฒนธรรม", "unitType": "department" },
+            { "id": "kps-hospitality-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "kamphaeng-saen-sports-science-health",
+          "nameTh": "คณะวิทยาศาสตร์การกีฬาและสุขภาพ",
+          "sourceUrl": "https://th.wikipedia.org/wiki/มหาวิทยาลัยเกษตรศาสตร์",
+          "units": []
+        }
+      ]
+    },
+    {
+      "id": "sriracha",
+      "nameTh": "วิทยาเขตศรีราชา",
+      "faculties": [
+        {
+          "id": "sriracha-international-maritime",
+          "nameTh": "คณะพาณิชยนาวีนานาชาติ",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=03&FacultyID=74",
+          "units": [
+            { "id": "src-maritime-navigation-logistics", "nameTh": "ภาควิชาวิทยาการเดินเรือและโลจิสติกส์ทางทะเล", "unitType": "department" },
+            { "id": "src-maritime-marine-engineering", "nameTh": "ภาควิชาวิศวกรรมทางทะเล", "unitType": "department" },
+            { "id": "src-maritime-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "sriracha-management-sciences",
+          "nameTh": "คณะวิทยาการจัดการ",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=03&FacultyID=45",
+          "units": [
+            { "id": "src-management-education-service", "nameTh": "ศูนย์บริการการศึกษา", "unitType": "center" },
+            { "id": "src-management-business-integration", "nameTh": "ศูนย์บูรณาการทางธุรกิจ", "unitType": "center" },
+            { "id": "src-management-academic-institute", "nameTh": "สถาบันวิชาการวิทยาการจัดการ", "unitType": "institute" },
+            { "id": "src-management-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "sriracha-science",
+          "nameTh": "คณะวิทยาศาสตร์ ศรีราชา",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=03&FacultyID=46",
+          "units": [
+            { "id": "src-science-computer-science", "nameTh": "สาขาวิชาวิทยาการคอมพิวเตอร์", "unitType": "branch" },
+            { "id": "src-science-basic-physical-education", "nameTh": "สาขาวิชาวิทยาศาสตร์พื้นฐานและพลศึกษา", "unitType": "branch" },
+            { "id": "src-science-environmental-science", "nameTh": "สาขาวิชาวิทยาศาสตร์สิ่งแวดล้อม", "unitType": "branch" },
+            { "id": "src-science-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "sriracha-engineering",
+          "nameTh": "คณะวิศวกรรมศาสตร์ ศรีราชา",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=03&FacultyID=47",
+          "units": [
+            { "id": "src-engineering-civil", "nameTh": "ภาควิชาวิศวกรรมโยธา", "unitType": "department" },
+            { "id": "src-engineering-computer", "nameTh": "สาขาวิชาวิศวกรรมคอมพิวเตอร์", "unitType": "branch" },
+            { "id": "src-engineering-mechanical", "nameTh": "สาขาวิชาวิศวกรรมเครื่องกล", "unitType": "branch" },
+            { "id": "src-engineering-electrical", "nameTh": "สาขาวิชาวิศวกรรมไฟฟ้า", "unitType": "branch" },
+            { "id": "src-engineering-industrial", "nameTh": "สาขาวิชาวิศวกรรมอุตสาหการ", "unitType": "branch" },
+            { "id": "src-engineering-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "sriracha-economics",
+          "nameTh": "คณะเศรษฐศาสตร์ ศรีราชา",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=03&FacultyID=77",
+          "units": [
+            { "id": "src-economics-economics", "nameTh": "ภาควิชาเศรษฐศาสตร์", "unitType": "department" },
+            { "id": "src-economics-applied-economics", "nameTh": "ภาควิชาเศรษฐศาสตร์ประยุกต์", "unitType": "department" },
+            { "id": "src-economics-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sakon-nakhon",
+      "nameTh": "วิทยาเขตเฉลิมพระเกียรติ จังหวัดสกลนคร",
+      "faculties": [
+        {
+          "id": "sakon-natural-resources-agro-industry",
+          "nameTh": "คณะทรัพยากรธรรมชาติและอุตสาหกรรมเกษตร",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=04&FacultyID=48",
+          "units": [
+            { "id": "csc-natural-agricultural-bioresources", "nameTh": "สาขาวิชาทรัพยากรเกษตรชีวภาพ", "unitType": "branch" },
+            { "id": "csc-natural-food-technology", "nameTh": "สาขาวิชาเทคโนโลยีการอาหาร", "unitType": "branch" },
+            { "id": "csc-natural-campus-office", "nameTh": "สำนักงานวิทยาเขต", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "sakon-science-engineering",
+          "nameTh": "คณะวิทยาศาสตร์และวิศวกรรมศาสตร์",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=04&FacultyID=49",
+          "units": [
+            { "id": "csc-science-engineering-it", "nameTh": "สาขาเทคโนโลยีสารสนเทศ", "unitType": "branch" },
+            { "id": "csc-science-engineering-civil-environmental", "nameTh": "สาขาวิชาวิศวกรรมโยธาและสิ่งแวดล้อม", "unitType": "branch" },
+            { "id": "csc-science-engineering-basic-science", "nameTh": "สาขาวิทยาศาสตร์พื้นฐาน", "unitType": "branch" },
+            { "id": "csc-science-engineering-mechanical-production", "nameTh": "สาขาวิศวกรรมเครื่องกลและการผลิต", "unitType": "branch" },
+            { "id": "csc-science-engineering-electrical-computer", "nameTh": "สาขาวิศวกรรมไฟฟ้าและคอมพิวเตอร์", "unitType": "branch" },
+            { "id": "csc-science-engineering-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "sakon-liberal-arts-management",
+          "nameTh": "คณะศิลปศาสตร์และวิทยาการจัดการ",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=04&FacultyID=50",
+          "units": [
+            { "id": "csc-lam-business", "nameTh": "ภาควิชาบริหารธุรกิจ", "unitType": "department" },
+            { "id": "csc-lam-language", "nameTh": "ภาควิชาภาษา", "unitType": "department" },
+            { "id": "csc-lam-social-sciences", "nameTh": "ภาควิชาสังคมศาสตร์", "unitType": "department" },
+            { "id": "csc-lam-accounting-finance", "nameTh": "สาขาวิชาการบัญชีและการเงิน (กลุ่มวิชาเศรษฐศาสตร์ทรัพยากรและการเงิน)", "unitType": "branch" }
+          ]
+        },
+        {
+          "id": "sakon-public-health",
+          "nameTh": "คณะสาธารณสุขศาสตร์",
+          "sourceUrl": "https://research.ku.ac.th/forest/Department.aspx?CampusID=04&FacultyID=78",
+          "units": [
+            { "id": "csc-public-health-administration", "nameTh": "ภาควิชาบริหารงานสาธารณสุข", "unitType": "department" },
+            { "id": "csc-public-health-community-health", "nameTh": "ภาควิชาอนามัยชุมชน", "unitType": "department" },
+            { "id": "csc-public-health-secretariat", "nameTh": "สำนักงานเลขานุการ", "unitType": "office", "simulate": false }
+          ]
+        },
+        {
+          "id": "sakon-education-learning-sciences",
+          "nameTh": "โครงการจัดตั้งคณะศึกษาศาสตร์และวิทยาการการเรียนรู้",
+          "sourceUrl": "https://th.wikipedia.org/wiki/มหาวิทยาลัยเกษตรศาสตร์",
+          "units": []
+        }
+      ]
+    },
+    {
+      "id": "suphanburi",
+      "nameTh": "โครงการจัดตั้งวิทยาเขตสุพรรณบุรี",
+      "faculties": [
+        {
+          "id": "suphanburi-interdisciplinary-management-technology",
+          "nameTh": "คณะสหวิทยาการจัดการและเทคโนโลยี",
+          "sourceUrl": "https://th.wikipedia.org/wiki/มหาวิทยาลัยเกษตรศาสตร์",
+          "units": []
+        }
+      ]
+    }
+  ]
+}
