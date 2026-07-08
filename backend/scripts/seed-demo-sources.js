@@ -32,13 +32,13 @@ const shouldReset = process.argv.includes('--reset');
 const useMainSamples = toBool(process.env.DEMO_SAMPLE_MAIN_DB, true);
 
 const simulationConfig = {
-    startDate: process.env.DEMO_START_DATE || '2025-01-01',
-    endDate: process.env.DEMO_END_DATE || '2025-12-31',
+    startDate: process.env.DEMO_START_DATE || '2021-01-01',
+    endDate: process.env.DEMO_END_DATE || '2026-12-31',
     baseDailyEvents: toNumber(process.env.DEMO_DAILY_EVENTS, 28),
     usersPerOrg: toNumber(process.env.DEMO_USERS_PER_ORG, 4),
     appSampleSize: toNumber(process.env.DEMO_APP_SAMPLE_SIZE, 16),
     usageTemplateLimit: toNumber(process.env.DEMO_USAGE_TEMPLATE_LIMIT, 5000),
-    noteCount: toNumber(process.env.DEMO_NOTE_COUNT, 240),
+    noteCount: toNumber(process.env.DEMO_NOTE_COUNT, 1440),
 };
 
 const sharedSeedConfig = {
@@ -564,9 +564,9 @@ const seedDimensions = async () => {
                 "userInfo" = EXCLUDED."userInfo"`,
             [
                 makeUuid(`user:${user.slug}`),
-                '2025-01-01T00:00:00.000Z',
-                '2025-12-31T09:00:00.000Z',
-                '2025-12-31T09:00:00.000Z',
+                `${simulationConfig.startDate}T00:00:00.000Z`,
+                `${simulationConfig.endDate}T09:00:00.000Z`,
+                `${simulationConfig.endDate}T09:00:00.000Z`,
                 user.memberType,
                 JSON.stringify({
                     'campus-id': user.org.campusId,
@@ -587,28 +587,28 @@ const seedDimensions = async () => {
 };
 
 const classifyDate = date => {
-    const key = dayKey(date);
-    if (key >= '2025-02-10' && key <= '2025-02-21') {
+    const md = dayKey(date).slice(5);
+    if (md >= '02-10' && md <= '02-21') {
         return { slug: 'semester-2-midterm', eventFactor: 1.65, tokenFactor: 1.28, failRate: 0.025, focusFacultyIds: ['bangkhen-engineering', 'bangkhen-science'] };
     }
-    if (key >= '2025-03-24' && key <= '2025-04-04') {
+    if (md >= '03-24' && md <= '04-04') {
         return { slug: 'semester-2-final', eventFactor: 1.95, tokenFactor: 1.45, failRate: 0.03, focusFacultyIds: ['bangkhen-engineering', 'bangkhen-science', 'bangkhen-business-administration'] };
     }
-    if (key >= '2025-07-21' && key <= '2025-08-01') {
+    if (md >= '07-21' && md <= '08-01') {
         return { slug: 'semester-1-midterm', eventFactor: 1.6, tokenFactor: 1.25, failRate: 0.025, focusFacultyIds: ['kamphaeng-saen-liberal-arts-science', 'sriracha-science'] };
     }
-    if (key >= '2025-09-22' && key <= '2025-10-03') {
+    if (md >= '09-22' && md <= '10-03') {
         return { slug: 'semester-1-final', eventFactor: 1.9, tokenFactor: 1.42, failRate: 0.03, focusFacultyIds: ['sakon-science-engineering', 'sriracha-engineering', 'bangkhen-science'] };
     }
-    if ((key >= '2025-01-01' && key <= '2025-01-12')
-        || (key >= '2025-04-05' && key <= '2025-05-31')
-        || (key >= '2025-10-04' && key <= '2025-11-09')) {
+    if ((md >= '01-01' && md <= '01-12')
+        || (md >= '04-05' && md <= '05-31')
+        || (md >= '10-04' && md <= '11-09')) {
         return { slug: 'semester-break', eventFactor: 0.35, tokenFactor: 0.82, failRate: 0.008, focusFacultyIds: [] };
     }
-    if (key >= '2025-06-01' && key <= '2025-06-14') {
+    if (md >= '06-01' && md <= '06-14') {
         return { slug: 'semester-start', eventFactor: 1.2, tokenFactor: 0.95, failRate: 0.01, focusFacultyIds: [] };
     }
-    if (key >= '2025-11-10' && key <= '2025-11-23') {
+    if (md >= '11-10' && md <= '11-23') {
         return { slug: 'semester-start', eventFactor: 1.18, tokenFactor: 0.95, failRate: 0.01, focusFacultyIds: [] };
     }
     return { slug: 'normal-semester', eventFactor: 1, tokenFactor: 1, failRate: 0.012, focusFacultyIds: [] };
