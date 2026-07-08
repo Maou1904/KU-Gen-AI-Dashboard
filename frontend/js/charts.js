@@ -84,6 +84,45 @@ const Charts = {
         }
     },
 
+    formatPercentage(value) {
+        const numeric = Number(value || 0);
+        if (!Number.isFinite(numeric)) return '0%';
+        if (numeric > 0 && numeric < 0.01) return '<0.01%';
+        const decimals = numeric < 1 ? 2 : 1;
+        return `${numeric.toFixed(decimals).replace(/\.0$/, '')}%`;
+    },
+
+    getDoughnutDisplayData(values, minimumShare = 0) {
+        const numericValues = values.map(value => Math.max(0, Number(value || 0)));
+        const total = numericValues.reduce((sum, value) => sum + value, 0);
+        if (!total || !minimumShare) return numericValues;
+
+        const positiveCount = numericValues.filter(value => value > 0).length;
+        if (!positiveCount) return numericValues;
+
+        const safeMinimumShare = Math.min(minimumShare, 0.8 / positiveCount);
+        const shares = numericValues.map(value => value / total);
+        const smallIndexes = shares
+            .map((share, index) => ({ share, index }))
+            .filter(item => item.share > 0 && item.share < safeMinimumShare)
+            .map(item => item.index);
+
+        if (!smallIndexes.length) return numericValues;
+
+        const smallSet = new Set(smallIndexes);
+        const largeShareTotal = shares.reduce((sum, share, index) => (
+            smallSet.has(index) ? sum : sum + share
+        ), 0);
+        const availableLargeShare = Math.max(0, 1 - (smallIndexes.length * safeMinimumShare));
+
+        return shares.map((share, index) => {
+            if (!share) return 0;
+            if (smallSet.has(index)) return safeMinimumShare * total;
+            if (!largeShareTotal) return share * total;
+            return (share / largeShareTotal) * availableLargeShare * total;
+        });
+    },
+
     createBarChart(canvasId, labels, data, title, highlightIndex) {
         const ctx = document.getElementById(canvasId);
         if (!ctx) return;
@@ -183,18 +222,30 @@ const Charts = {
         });
     },
 
-    createDoughnutChart(canvasId, labels, data, colors, centerText = null, subtext = null, onSelect = null) {
+    createDoughnutChart(canvasId, labels, data, colors, centerText = null, subtext = null, onSelect = null, options = {}) {
         const ctx = document.getElementById(canvasId);
         if (!ctx) return;
         this.destroy(canvasId);
 
-        const themedColors = this.getThemePalette(data.length);
+        const rawValues = data.map(value => Math.max(0, Number(value || 0)));
+        const displayValues = this.getDoughnutDisplayData(rawValues, Number(options.minVisibleShare || 0));
+        const total = rawValues.reduce((sum, value) => sum + value, 0);
+        const percentages = (options.percentages || rawValues.map(value => total ? (value / total) * 100 : 0))
+            .map(value => Number(value || 0));
+        const providedColors = Array.isArray(colors) && colors.every(Boolean) && colors.length === data.length;
+        const themedColors = providedColors
+            ? colors
+            : this.getThemePalette(data.length);
+        const valueType = options.valueType || 'percent';
+
         this.chartInstances[canvasId] = new Chart(ctx, {
             type: 'doughnut',
             data: {
                 labels,
                 datasets: [{
-                    data,
+                    data: displayValues,
+                    rawValues,
+                    percentages,
                     backgroundColor: themedColors,
                     borderColor: '#fbf9f9',
                     borderWidth: 3,
@@ -217,7 +268,14 @@ const Charts = {
                         backgroundColor: '#1b1c1c',
                         padding: 12,
                         callbacks: {
-                            label: context => `${context.label}: ${context.parsed}%`
+                            label: context => {
+                                const rawValue = context.dataset.rawValues?.[context.dataIndex] ?? context.parsed;
+                                const percentage = context.dataset.percentages?.[context.dataIndex] ?? rawValue;
+                                if (valueType === 'tokens') {
+                                    return `${context.label}: ${rawValue.toLocaleString()} Tokens (${this.formatPercentage(percentage)})`;
+                                }
+                                return `${context.label}: ${this.formatPercentage(percentage)}`;
+                            }
                         }
                     }
                 }

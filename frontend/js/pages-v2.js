@@ -708,7 +708,7 @@ Object.assign(App, {
             }));
             const activeApp = activeFamily ? { appName: activeFamily } : null;
             const chartItems = apps;
-            const values = chartItems.map(item => item.percentage);
+            const values = chartItems.map(item => item.tokens);
             const total = this.formatCompact(
                 chartItems.reduce((sum, item) => sum + Number(item.tokens || 0), 0)
             );
@@ -722,6 +722,11 @@ Object.assign(App, {
                 activeApp ? null : index => {
                     this.state.consumption.drilldownApp = chartItems[index].id;
                     this.render('api');
+                },
+                {
+                    valueType: 'tokens',
+                    percentages: chartItems.map(item => item.percentage),
+                    minVisibleShare: 0.015,
                 }
             );
             const tokenData = (() => {
