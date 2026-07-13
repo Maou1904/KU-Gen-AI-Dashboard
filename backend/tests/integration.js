@@ -7,6 +7,11 @@ const {
     dashboardPool,
     difyPool,
 } = require('../config/database');
+const {
+    usageSource,
+    modelUsageSource,
+    noteSource,
+} = require('../routes/filter-utils');
 
 let server;
 
@@ -37,6 +42,7 @@ const run = async () => {
         ['/api/health'],
         ['/api/sync/status'],
         ['/api/sync/preflight'],
+        ['/api/dashboard/available-years'],
         ['/api/dashboard/metrics'],
         ['/api/dashboard/monthly-usage'],
         ['/api/dashboard/trending-topics'],
@@ -44,6 +50,7 @@ const run = async () => {
         ['/api/api-management/model-consumption'],
         ['/api/api-management/hierarchy'],
         ['/api/api-management/costs'],
+        ['/api/api-management/model-latency'],
         ['/api/department/summary?limit=7&offset=0'],
         ['/api/department/kpis'],
         ['/api/department/heatmap'],
@@ -65,6 +72,12 @@ const run = async () => {
         if (path === '/api/api-management/costs' && body.data.unit !== 'Coin') {
             throw new Error('Consumption summary must expose Coin as its unit');
         }
+        if (path === '/api/api-management/costs' && !('currentTokenConsumption' in body.data)) {
+            throw new Error('Consumption summary must expose token consumption for KPI cards');
+        }
+        if (path === '/api/api-management/model-latency' && body.data.some(item => item.avgLatency == null)) {
+            throw new Error('Model latency must expose average latency values');
+        }
         if (path === '/api/department/kpis' && body.data.unit !== 'Coin') {
             throw new Error('Department KPIs must expose Coin as their unit');
         }
@@ -80,6 +93,32 @@ const run = async () => {
         throw new Error('Source database connections must be protected as read only');
     }
     const schedule = status.data.schedule;
+
+    const availableYears = await request(baseUrl, '/api/dashboard/available-years');
+    const expectedYearsResult = await dashboardPool.query(
+        `WITH years AS (
+            SELECT EXTRACT(YEAR FROM event_at)::int AS year
+            FROM ${usageSource} u
+            WHERE event_at IS NOT NULL
+            UNION
+            SELECT EXTRACT(YEAR FROM event_at)::int AS year
+            FROM ${modelUsageSource} u
+            WHERE event_at IS NOT NULL
+            UNION
+            SELECT EXTRACT(YEAR FROM created_at)::int AS year
+            FROM ${noteSource} n
+            WHERE created_at IS NOT NULL
+         )
+         SELECT year
+         FROM years
+         WHERE year IS NOT NULL
+         ORDER BY year`
+    );
+    const expectedYears = expectedYearsResult.rows.map(row => Number(row.year));
+    const responseYears = availableYears.data.map(Number);
+    if (JSON.stringify(responseYears) !== JSON.stringify(expectedYears)) {
+        throw new Error('Available years must come from live dashboard data only');
+    }
 
     const providers = await request(baseUrl, '/api/api-management/provider-consumption');
     const providerNames = providers.data.map(item => item.family);
@@ -137,6 +176,9 @@ const run = async () => {
     );
     const departmentKPIs = await request(baseUrl, '/api/department/kpis');
     const monthlyUsage = await request(baseUrl, '/api/dashboard/monthly-usage');
+    if (monthlyUsage.data.some(item => item.activeUsers == null || item.coins == null)) {
+        throw new Error('Monthly usage must expose active users and Coin totals for overview trends');
+    }
     const monthlyTokens = monthlyUsage.data.reduce(
         (sum, item) => sum + Number(item.tokens),
         0
@@ -168,14 +210,30 @@ const run = async () => {
         throw new Error('Hierarchy API must not synthesize Unknown organization levels');
     }
 
+    const filterFixture = await dashboardPool.query(
+        `SELECT
+            TO_CHAR(DATE_TRUNC('month', event_at), 'YYYY-MM-DD') AS start,
+            TO_CHAR(DATE_TRUNC('month', event_at) + INTERVAL '1 month - 1 day', 'YYYY-MM-DD') AS end,
+            campus,
+            COUNT(*)::int AS transactions
+         FROM ${usageSource} u
+         WHERE campus IS NOT NULL
+         GROUP BY DATE_TRUNC('month', event_at), campus
+         ORDER BY DATE_TRUNC('month', event_at) DESC, transactions DESC
+         LIMIT 1`
+    );
+    const fixture = filterFixture.rows[0];
+    if (!fixture) {
+        throw new Error('No hierarchy/date data is available to validate dashboard filters');
+    }
     const filtered = await request(
         baseUrl,
-        '/api/dashboard/metrics?start=2025-06-01&end=2025-06-30&campuses=B'
+        `/api/dashboard/metrics?start=${fixture.start}&end=${fixture.end}&campuses=${encodeURIComponent(fixture.campus)}`
     );
     const filteredTransactions = filtered.data.find(
         item => item.metricName === 'TOTAL_TRANSACTIONS'
     );
-    if (Number(filteredTransactions?.value) !== 1) {
+    if (Number(filteredTransactions?.value) !== Number(fixture.transactions)) {
         throw new Error('Hierarchy and date filter contract did not affect dashboard metrics');
     }
 
@@ -190,6 +248,53 @@ const run = async () => {
     );
     const range = comparisonRange.rows[0];
     const comparisonQuery = `?start=${range.start}&end=${range.end}`;
+
+    const dashboardMonthlyTrend = await request(
+        baseUrl,
+        `/api/dashboard/monthly-usage${comparisonQuery}&granularity=month`
+    );
+    const dashboardDailyTrend = await request(
+        baseUrl,
+        `/api/dashboard/monthly-usage${comparisonQuery}&granularity=day`
+    );
+    const dashboardYearlyTrend = await request(
+        baseUrl,
+        '/api/dashboard/monthly-usage?granularity=year'
+    );
+    if (
+        dashboardMonthlyTrend.granularity !== 'month'
+        || dashboardDailyTrend.granularity !== 'day'
+        || dashboardYearlyTrend.granularity !== 'year'
+        || dashboardMonthlyTrend.data.length !== 1
+        || dashboardDailyTrend.data.length < dashboardMonthlyTrend.data.length
+        || dashboardYearlyTrend.data.length < 1
+    ) {
+        throw new Error('Dashboard transaction trends must support day, month, and year granularity');
+    }
+
+    const behaviorMonthlyUsers = await request(
+        baseUrl,
+        `/api/behavior/daily-users${comparisonQuery}&granularity=month`
+    );
+    const behaviorDailyUsers = await request(
+        baseUrl,
+        `/api/behavior/daily-users${comparisonQuery}&granularity=day`
+    );
+    const behaviorYearlyUsers = await request(
+        baseUrl,
+        '/api/behavior/daily-users?granularity=year'
+    );
+    if (
+        behaviorMonthlyUsers.granularity !== 'month'
+        || behaviorDailyUsers.granularity !== 'day'
+        || behaviorYearlyUsers.granularity !== 'year'
+        || behaviorMonthlyUsers.data.length !== 1
+        || behaviorDailyUsers.data.length < behaviorMonthlyUsers.data.length
+        || behaviorYearlyUsers.data.length < 1
+    ) {
+        throw new Error('Behavior active-user trends must support day, month, and year granularity');
+    }
+
     const comparisonMetrics = await request(
         baseUrl,
         `/api/dashboard/metrics${comparisonQuery}`
@@ -222,12 +327,17 @@ const run = async () => {
         baseUrl,
         `/api/api-management/costs${comparisonQuery}`
     );
-    if (
-        Number(comparisonCosts.data.usageChange)
-        !== Number(comparisonCosts.data.currentBillingCycle)
-            - Number(comparisonCosts.data.previousBillingCycle)
-    ) {
+    const actualCoinChange = Number(comparisonCosts.data.usageChange);
+    const expectedCoinChange = Number(comparisonCosts.data.currentBillingCycle)
+        - Number(comparisonCosts.data.previousBillingCycle);
+    if (Math.abs(actualCoinChange - expectedCoinChange) > 0.000001) {
         throw new Error('Consumption Coin change is not calculated from live periods');
+    }
+    const actualTokenChange = Number(comparisonCosts.data.tokenUsageChange);
+    const expectedConsumptionTokenChange = Number(comparisonCosts.data.currentTokenConsumption)
+        - Number(comparisonCosts.data.previousTokenConsumption);
+    if (Math.abs(actualTokenChange - expectedConsumptionTokenChange) > 0.000001) {
+        throw new Error('Consumption token change is not calculated from live periods');
     }
 
     const comparisonNotes = await request(

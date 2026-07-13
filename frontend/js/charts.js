@@ -84,12 +84,23 @@ const Charts = {
         }
     },
 
-    formatPercentage(value) {
+    formatPercentage(value, fixedDecimals = null) {
         const numeric = Number(value || 0);
         if (!Number.isFinite(numeric)) return '0%';
+        if (fixedDecimals !== null) return `${numeric.toFixed(fixedDecimals)}%`;
         if (numeric > 0 && numeric < 0.01) return '<0.01%';
         const decimals = numeric < 1 ? 2 : 1;
         return `${numeric.toFixed(decimals).replace(/\.0$/, '')}%`;
+    },
+
+    formatCompactNumber(value) {
+        const numeric = Number(value || 0);
+        const absolute = Math.abs(numeric);
+        if (absolute >= 1000000000000) return `${(numeric / 1000000000000).toFixed(2)}T`;
+        if (absolute >= 1000000000) return `${(numeric / 1000000000).toFixed(2)}B`;
+        if (absolute >= 1000000) return `${(numeric / 1000000).toFixed(2)}M`;
+        if (absolute >= 1000) return `${(numeric / 1000).toFixed(1)}k`;
+        return numeric.toLocaleString();
     },
 
     getDoughnutDisplayData(values, minimumShare = 0) {
@@ -222,10 +233,75 @@ const Charts = {
         });
     },
 
+    createOverviewAreaChart(canvasId, labels, series) {
+        const ctx = document.getElementById(canvasId);
+        if (!ctx) return;
+        this.destroy(canvasId);
+
+        const palette = this.getThemePalette(series.length);
+        this.chartInstances[canvasId] = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: series.map((item, index) => ({
+                    label: item.label,
+                    data: item.data,
+                    rawData: item.rawData || item.data,
+                    valueLabel: item.valueLabel || '',
+                    borderColor: palette[index],
+                    backgroundColor: this.withAlpha(palette[index], 0.14),
+                    borderWidth: 3,
+                    pointRadius: 3,
+                    pointHoverRadius: 6,
+                    tension: 0.32,
+                    fill: true,
+                })),
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                layout: { padding: { top: 24 } },
+                plugins: {
+                    valueLabels: false,
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        align: 'end',
+                        labels: { color: '#1b1c1c', font: { size: 12, weight: '700' }, usePointStyle: true },
+                    },
+                    tooltip: {
+                        backgroundColor: '#1b1c1c',
+                        padding: 12,
+                        callbacks: {
+                            label: context => {
+                                const raw = context.dataset.rawData?.[context.dataIndex] ?? context.parsed.y;
+                                const suffix = context.dataset.valueLabel ? ` ${context.dataset.valueLabel}` : '';
+                                return `${context.dataset.label}: ${this.formatCompactNumber(raw)}${suffix} (${Number(context.parsed.y || 0).toFixed(1)} index)`;
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: '#efeded' },
+                        ticks: { color: '#707a6c', callback: value => `${value}` },
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#707a6c' },
+                    },
+                },
+            },
+        });
+    },
+
     createDoughnutChart(canvasId, labels, data, colors, centerText = null, subtext = null, onSelect = null, options = {}) {
         const ctx = document.getElementById(canvasId);
         if (!ctx) return;
         this.destroy(canvasId);
+        options = options || {};
 
         const rawValues = data.map(value => Math.max(0, Number(value || 0)));
         const displayValues = this.getDoughnutDisplayData(rawValues, Number(options.minVisibleShare || 0));
@@ -237,6 +313,9 @@ const Charts = {
             ? colors
             : this.getThemePalette(data.length);
         const valueType = options.valueType || 'percent';
+        const percentageDecimals = Number.isInteger(options.percentageDecimals)
+            ? options.percentageDecimals
+            : null;
 
         this.chartInstances[canvasId] = new Chart(ctx, {
             type: 'doughnut',
@@ -272,15 +351,275 @@ const Charts = {
                                 const rawValue = context.dataset.rawValues?.[context.dataIndex] ?? context.parsed;
                                 const percentage = context.dataset.percentages?.[context.dataIndex] ?? rawValue;
                                 if (valueType === 'tokens') {
-                                    return `${context.label}: ${rawValue.toLocaleString()} Tokens (${this.formatPercentage(percentage)})`;
+                                    return `${context.label}: ${rawValue.toLocaleString()} Tokens (${this.formatPercentage(percentage, percentageDecimals)})`;
                                 }
-                                return `${context.label}: ${this.formatPercentage(percentage)}`;
+                                return `${context.label}: ${this.formatPercentage(percentage, percentageDecimals)}`;
                             }
                         }
                     }
                 }
             },
             plugins: [this.centerTextPlugin]
+        });
+    },
+
+    createComboBarLineChart(canvasId, labels, barData, lineData, barLabel, lineLabel) {
+        const ctx = document.getElementById(canvasId);
+        if (!ctx) return;
+        this.destroy(canvasId);
+
+        const palette = this.getThemePalette(2);
+        this.chartInstances[canvasId] = new Chart(ctx, {
+            data: {
+                labels,
+                datasets: [
+                    {
+                        type: 'bar',
+                        label: barLabel,
+                        data: barData,
+                        backgroundColor: this.withAlpha(palette[0], 0.72),
+                        borderRadius: 4,
+                        borderSkipped: false,
+                    },
+                    {
+                        type: 'line',
+                        label: lineLabel,
+                        data: lineData,
+                        borderColor: palette[1],
+                        backgroundColor: this.withAlpha(palette[1], 0.12),
+                        borderWidth: 4,
+                        pointRadius: 4,
+                        pointBackgroundColor: palette[1],
+                        tension: 0.3,
+                        fill: false,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { top: 28 } },
+                plugins: {
+                    valueLabels: {
+                        formatter: value => this.formatCompactNumber(value),
+                    },
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        align: 'end',
+                        labels: { color: '#1b1c1c', font: { size: 12, weight: '700' }, usePointStyle: true },
+                    },
+                    tooltip: { backgroundColor: '#1b1c1c', padding: 12 },
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: '#efeded' },
+                        ticks: { color: '#707a6c', callback: value => this.formatCompactNumber(value) },
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#707a6c' },
+                    },
+                },
+            },
+            plugins: [this.valueLabelsPlugin],
+        });
+    },
+
+    createDualAxisComboChart(canvasId, labels, barData, lineData, barLabel, lineLabel) {
+        const ctx = document.getElementById(canvasId);
+        if (!ctx) return;
+        this.destroy(canvasId);
+
+        const palette = this.getThemePalette(2);
+        this.chartInstances[canvasId] = new Chart(ctx, {
+            data: {
+                labels,
+                datasets: [
+                    {
+                        type: 'bar',
+                        label: barLabel,
+                        data: barData,
+                        yAxisID: 'y',
+                        backgroundColor: this.withAlpha(palette[0], 0.7),
+                        borderRadius: 4,
+                        borderSkipped: false,
+                    },
+                    {
+                        type: 'line',
+                        label: lineLabel,
+                        data: lineData,
+                        yAxisID: 'y1',
+                        borderColor: palette[1],
+                        backgroundColor: this.withAlpha(palette[1], 0.12),
+                        borderWidth: 4,
+                        pointRadius: 4,
+                        pointBackgroundColor: palette[1],
+                        tension: 0.32,
+                        fill: false,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { top: 28 } },
+                plugins: {
+                    valueLabels: false,
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        align: 'end',
+                        labels: { color: '#1b1c1c', font: { size: 12, weight: '700' }, usePointStyle: true },
+                    },
+                    tooltip: {
+                        backgroundColor: '#1b1c1c',
+                        padding: 12,
+                        callbacks: {
+                            label: context => `${context.dataset.label}: ${this.formatCompactNumber(context.parsed.y)}`,
+                        },
+                    },
+                },
+                scales: {
+                    y: {
+                        type: 'linear',
+                        position: 'left',
+                        beginAtZero: true,
+                        grid: { color: '#efeded' },
+                        ticks: { color: '#707a6c', callback: value => this.formatCompactNumber(value) },
+                    },
+                    y1: {
+                        type: 'linear',
+                        position: 'right',
+                        beginAtZero: true,
+                        grid: { drawOnChartArea: false },
+                        ticks: { color: '#707a6c', callback: value => this.formatCompactNumber(value) },
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#707a6c' },
+                    },
+                },
+            },
+        });
+    },
+
+    createMultiLineChart(canvasId, labels, series, options = {}) {
+        const ctx = document.getElementById(canvasId);
+        if (!ctx) return;
+        this.destroy(canvasId);
+
+        const palette = this.getThemePalette(series.length);
+        const valueLabel = options.valueLabel || 'Tokens';
+        this.chartInstances[canvasId] = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: series.map((item, index) => ({
+                    label: item.label,
+                    data: item.data,
+                    borderColor: palette[index],
+                    backgroundColor: this.withAlpha(palette[index], 0.08),
+                    borderWidth: 3,
+                    pointRadius: 3,
+                    pointHoverRadius: 6,
+                    tension: 0.28,
+                    fill: Boolean(options.fill),
+                })),
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { top: 28 } },
+                plugins: {
+                    valueLabels: false,
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        align: 'end',
+                        labels: { color: '#1b1c1c', font: { size: 12, weight: '700' }, usePointStyle: true },
+                    },
+                    tooltip: {
+                        backgroundColor: '#1b1c1c',
+                        padding: 12,
+                        callbacks: {
+                            label: context => `${context.dataset.label}: ${this.formatCompactNumber(context.parsed.y)} ${valueLabel}`,
+                        },
+                    },
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: '#efeded' },
+                        ticks: { color: '#707a6c', callback: value => this.formatCompactNumber(value) },
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#707a6c' },
+                    },
+                },
+            },
+        });
+    },
+
+    createHorizontalBarChart(canvasId, labels, data, label, options = {}) {
+        const ctx = document.getElementById(canvasId);
+        if (!ctx) return;
+        this.destroy(canvasId);
+
+        const palette = this.getThemePalette(labels.length);
+        this.chartInstances[canvasId] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label,
+                    data,
+                    backgroundColor: palette,
+                    borderRadius: 4,
+                    borderSkipped: false,
+                }],
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { right: 24 } },
+                plugins: {
+                    valueLabels: {
+                        formatter: value => options.valueSuffix === '%'
+                            ? `${Number(value || 0).toFixed(2)}%`
+                            : options.valueSuffix === 's'
+                                ? `${Number(value || 0).toFixed(2)}s`
+                            : this.formatCompactNumber(value),
+                    },
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1b1c1c',
+                        padding: 12,
+                        callbacks: {
+                            label: context => options.valueSuffix === '%'
+                                ? `${context.dataset.label}: ${Number(context.parsed.x || 0).toFixed(2)}%`
+                                : options.valueSuffix === 's'
+                                    ? `${context.dataset.label}: ${Number(context.parsed.x || 0).toFixed(2)}s`
+                                : `${context.dataset.label}: ${this.formatCompactNumber(context.parsed.x)}`,
+                        },
+                    },
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        grid: { color: '#efeded' },
+                        ticks: { color: '#707a6c' },
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: { color: '#707a6c' },
+                    },
+                },
+            },
+            plugins: [this.valueLabelsPlugin],
         });
     },
 

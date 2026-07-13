@@ -116,6 +116,7 @@ await wait(150);
 const customRange = await evaluate(`(() => {
     const input = document.querySelector('[data-date-page="dashboard"]');
     const select = document.querySelector('[data-filter-page="dashboard"][data-date-field="year"]');
+    const selectedYear = Number(select.value);
     const inputStyle = getComputedStyle(input);
     const selectStyle = getComputedStyle(select);
     const controlStyleMatches = inputStyle.height === selectStyle.height
@@ -125,13 +126,23 @@ const customRange = await evaluate(`(() => {
     input.click();
     const pickerOpened = input._flatpickr.isOpen;
     const callback = input._flatpickr.config.onClose[0];
-    callback([new Date(2026, 4, 1), new Date(2026, 4, 15)]);
+    callback([new Date(selectedYear, 4, 1), new Date(selectedYear, 4, 15)]);
     input._flatpickr.close();
-    return { ...App.state.dashboard.filter.date, pickerOpened, controlStyleMatches };
+    return {
+        ...App.state.dashboard.filter.date,
+        pickerOpened,
+        controlStyleMatches,
+        yearOptions: [...select.options].map(option => option.value),
+        availableYears: App.getAvailableYears('dashboard').map(String),
+    };
 })()`);
 assert(customRange.mode === 'custom' && customRange.range.length === 2, 'Custom date range did not update state');
 assert(customRange.pickerOpened, 'Flatpickr custom range calendar did not open');
 assert(customRange.controlStyleMatches, 'Custom date input does not match the other date controls');
+assert(
+    JSON.stringify(customRange.yearOptions) === JSON.stringify(customRange.availableYears),
+    'Dashboard year filter options do not match the live available years'
+);
 
 await navigate('department');
 const analytics = await evaluate(`(() => {
@@ -160,19 +171,49 @@ const consumption = await evaluate(`(() => {
     const drilldownHeading = document.querySelector('main h3')?.textContent.trim();
     document.querySelector('[data-app-back]').click();
     document.querySelector('[data-dropdown-toggle="compare-years"]').click();
-    document.querySelector('[data-compare-year="2025"]').click();
+    const compareOptions = [...document.querySelectorAll('[data-compare-year]')];
+    const targetYear = compareOptions.find(input => !input.checked) || compareOptions[0];
+    targetYear.click();
+    const yearsAfterClick = [...App.state.consumption.selectedYears];
+    const tokenCells = [...document.querySelectorAll('.data-table tbody td:last-child')]
+        .map(element => element.textContent.trim());
+    const resetButtonExists = Boolean(document.querySelector('[data-reset-compare-years]'));
+    App.resetConsumptionYears();
+    const yearsAfterReset = [...App.state.consumption.selectedYears];
+    const latestYear = [...new Set(App.liveData.api.monthly.map(item => String(item.year)))].sort().at(-1);
     const next = document.querySelector('[data-pagination-target="consumption"][data-page-number="2"]');
     if (next) next.click();
     return {
         drilldownHeading,
-        years: App.state.consumption.selectedYears,
+        yearsAfterClick,
+        yearsAfterReset,
+        latestYear,
+        resetButtonExists,
+        clickedYear: targetYear.dataset.compareYear,
+        compareYearOptions: compareOptions.map(input => input.dataset.compareYear),
+        monthlyYears: [...new Set(App.liveData.api.monthly.map(item => String(item.year)))].sort(),
+        tokenCells,
         page: App.state.consumption.hierarchyPage,
         hasBack: Boolean(document.querySelector('[data-app-back]')),
         forestChartColor: Charts.chartInstances.modelChart.data.datasets[0].backgroundColor[0],
     };
 })()`);
 assert(consumption.drilldownHeading.includes('Model usage'), 'App to model drill-down did not render');
-assert(consumption.years.includes('2025') && consumption.years.includes('2026'), 'Year comparison multi-select failed');
+assert(consumption.yearsAfterClick.includes(consumption.clickedYear), 'Year comparison multi-select failed');
+assert(consumption.yearsAfterClick.length <= 6, 'Year comparison selected more than 6 years');
+assert(consumption.resetButtonExists, 'Year comparison reset button is missing');
+assert(
+    consumption.yearsAfterReset.length === 1 && consumption.yearsAfterReset[0] === consumption.latestYear,
+    'Year comparison reset did not return to the latest year only'
+);
+assert(
+    JSON.stringify(consumption.compareYearOptions) === JSON.stringify(consumption.monthlyYears),
+    'Consumption compare-year options do not match the live monthly years'
+);
+assert(
+    consumption.tokenCells.every(value => /(^[\d,]+$)|(^\d+\.\d{2}[MBT]$)/.test(value)),
+    'Hierarchy token values are not using the expected compact format'
+);
 assert(consumption.page === 2, 'Consumption hierarchy pagination did not advance');
 
 await evaluate(`(() => {
@@ -197,9 +238,15 @@ const behavior = await evaluate(`(() => ({
     badge: [...document.querySelectorAll('.tag-pill')].find(element => element.textContent.includes('Top'))?.textContent.trim(),
     tagCount: document.querySelectorAll('#popular-tags .tag-pill').length,
     filterCopy: document.querySelector('main h3 span')?.textContent.trim(),
+    appPercentages: [...document.querySelectorAll('.chart-container + .space-y-sm span.font-label-md')]
+        .map(element => element.textContent.trim()),
 }))()`);
 assert(behavior.badge === 'Top 10', 'Behavior tag badge is not Top 10');
 assert(behavior.tagCount === 10, 'Behavior page does not render exactly 10 tags');
+assert(
+    behavior.appPercentages.every(value => /^\d+\.\d{2}%$/.test(value)),
+    'Top Active Apps percentages are not rendered with 2 decimals'
+);
 
 await navigate('settings');
 await wait(1200);

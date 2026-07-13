@@ -170,15 +170,28 @@ router.get('/costs', async (req, res, next) => {
                 SELECT SUM(COALESCE(total_coins, 0)) AS previous_coins
                 FROM ${usageSource} u
                 WHERE ${filters.previous.sql}
+             ), current_model AS (
+                SELECT SUM(total_tokens)::bigint AS current_tokens
+                FROM ${modelUsageSource} u
+                WHERE ${filters.current.sql}
+             ), previous_model AS (
+                SELECT SUM(total_tokens)::bigint AS previous_tokens
+                FROM ${modelUsageSource} u
+                WHERE ${filters.previous.sql}
              )
              SELECT
                 current_coins AS "currentBillingCycle",
                 previous_coins AS "previousBillingCycle",
                 current_coins - previous_coins AS "usageChange",
+                current_model.current_tokens AS "currentTokenConsumption",
+                previous_model.previous_tokens AS "previousTokenConsumption",
+                current_model.current_tokens - previous_model.previous_tokens AS "tokenUsageChange",
                 'Coin' AS unit,
                 data_as_of AS "dataAsOf"
              FROM current_usage
-             CROSS JOIN previous_usage`,
+             CROSS JOIN previous_usage
+             CROSS JOIN current_model
+             CROSS JOIN previous_model`,
             [...filters.current.params, ...filters.previous.params]
         );
         const row = rows[0] || {};
@@ -218,7 +231,59 @@ router.get('/costs', async (req, res, next) => {
                     row.currentBillingCycle,
                     row.previousBillingCycle
                 ),
+                tokenChangePercent: percentChange(
+                    row.currentTokenConsumption,
+                    row.previousTokenConsumption
+                ),
             },
+            source: 'dashboard_test',
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.get('/model-latency', async (req, res, next) => {
+    try {
+        const appKey = /^\d+$/.test(String(req.query.appKey || ''))
+            ? Number(req.query.appKey)
+            : null;
+        const filter = usageFilter(req, 's');
+        const { rows } = await dashboardPool.query(
+            `WITH model_scope AS (
+                SELECT
+                    s.*,
+                    a.app_name,
+                    m.model_name,
+                    m.provider
+                FROM ${modelUsageSource} s
+                JOIN dim_app a ON a.app_key = s.app_key
+                LEFT JOIN dim_model m ON m.model_key = s.model_key
+                WHERE s.latency_seconds IS NOT NULL
+                  AND ($6::bigint IS NULL OR s.app_key = $6)
+                  AND ${filter.sql}
+             )
+             SELECT
+                CASE WHEN $6::bigint IS NULL THEN app_key::text ELSE COALESCE(model_key::text, 'unknown') END AS id,
+                CASE WHEN $6::bigint IS NULL THEN app_name ELSE COALESCE(model_name, 'Unknown model') END AS label,
+                CASE WHEN $6::bigint IS NULL THEN app_name ELSE provider END AS "groupLabel",
+                ROUND(AVG(latency_seconds)::numeric, 2) AS "avgLatency",
+                ROUND((PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_seconds))::numeric, 2) AS "p95Latency",
+                COUNT(*)::bigint AS events
+             FROM model_scope
+             GROUP BY
+                CASE WHEN $6::bigint IS NULL THEN app_key::text ELSE COALESCE(model_key::text, 'unknown') END,
+                CASE WHEN $6::bigint IS NULL THEN app_name ELSE COALESCE(model_name, 'Unknown model') END,
+                CASE WHEN $6::bigint IS NULL THEN app_name ELSE provider END
+             ORDER BY "avgLatency" DESC
+             LIMIT 8`,
+            [...filter.params, appKey]
+        );
+
+        res.json({
+            success: true,
+            data: rows,
+            mode: appKey ? 'models' : 'apps',
             source: 'dashboard_test',
         });
     } catch (error) {

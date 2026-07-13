@@ -13,17 +13,21 @@ const router = express.Router();
 router.get('/daily-users', async (req, res, next) => {
     try {
         const filter = usageFilter(req);
+        const allowedGranularities = new Set(['day', 'month', 'year']);
+        const granularity = allowedGranularities.has(req.query.granularity)
+            ? req.query.granularity
+            : 'day';
         const { rows } = await dashboardPool.query(
             `SELECT
-                event_at::date AS date,
+                DATE_TRUNC('${granularity}', event_at)::date AS date,
                 COUNT(DISTINCT user_key)::bigint AS users
              FROM ${usageSource} u
              WHERE ${filter.sql}
-             GROUP BY event_at::date
-             ORDER BY event_at::date`,
+             GROUP BY DATE_TRUNC('${granularity}', event_at)::date
+             ORDER BY DATE_TRUNC('${granularity}', event_at)::date`,
             filter.params
         );
-        res.json({ success: true, data: rows, source: 'dashboard_test' });
+        res.json({ success: true, data: rows, granularity, source: 'dashboard_test' });
     } catch (error) {
         next(error);
     }

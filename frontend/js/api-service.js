@@ -53,6 +53,10 @@ const API = {
         return this.request(`/dashboard/monthly-usage${query}`);
     },
 
+    async getAvailableYears() {
+        return this.request('/dashboard/available-years');
+    },
+
     async getTrendingTopics(query = '') {
         return this.request(`/dashboard/trending-topics${query}`);
     },
@@ -72,6 +76,10 @@ const API = {
 
     async getCosts(query = '') {
         return this.request(`/api-management/costs${query}`);
+    },
+
+    async getModelLatency(query = '') {
+        return this.request(`/api-management/model-latency${query}`);
     },
 
     // Department endpoints

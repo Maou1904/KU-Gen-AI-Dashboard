@@ -1,5 +1,646 @@
 // Page renderers for the interactive hierarchy/date filters and settings workspace.
 Object.assign(App, {
+    getDashboardKpis() {
+        const live = this.liveData.dashboard;
+        const metricMeta = {
+            ACTIVE_USERS: ['ACTIVE USERS', 'group'],
+            TOKEN_CONSUMPTION: ['TOKEN CONSUMPTION', 'token'],
+            COIN_CONSUMPTION: ['COIN CONSUMPTION', 'toll'],
+            TOTAL_TRANSACTIONS: ['TOTAL TRANSACTIONS', 'forum'],
+        };
+
+        return live.metrics.map(metric => {
+            const [label, icon] = metricMeta[metric.metricName] || [metric.metricName, 'analytics'];
+            const numeric = Number(metric.value || 0);
+            const value = metric.unit === 'Coin'
+                ? `${numeric.toLocaleString(undefined, { maximumFractionDigits: 1 })} Coin`
+                : metric.unit === 'tokens'
+                    ? this.formatTokenUnits(numeric)
+                    : numeric.toLocaleString();
+
+            return {
+                label,
+                value,
+                change: this.formatComparison(metric.changePercent),
+                icon,
+                type: this.comparisonType(metric.changePercent),
+            };
+        });
+    },
+
+    getDashboardTrendRows() {
+        const live = this.liveData.dashboard;
+        const granularity = live.granularity || this.getDateGranularity(this.state.dashboard.filter.date);
+        return (live.monthly || []).map(item => ({
+            label: this.formatTrendPeriod(item, granularity),
+            transactions: Number(item.usage || 0),
+            activeUsers: Number(item.activeUsers || 0),
+            tokens: Number(item.tokens || 0),
+            coins: Number(item.coins || 0),
+            granularity,
+        }));
+    },
+
+    getPeriodScopeLabel(granularity) {
+        if (granularity === 'day') return 'Daily';
+        if (granularity === 'year') return 'Yearly';
+        return 'Monthly';
+    },
+
+    getDashboardTrendStats(rows) {
+        const totalTransactions = rows.reduce((sum, item) => sum + item.transactions, 0);
+        const totalTokens = rows.reduce((sum, item) => sum + item.tokens, 0);
+        const averageTransactions = rows.length ? totalTransactions / rows.length : 0;
+        const peak = rows.reduce((best, item) => (
+            !best || item.transactions > best.transactions ? item : best
+        ), null);
+
+        return { totalTransactions, totalTokens, averageTransactions, peak };
+    },
+
+    getDashboardOverviewSeries(rows) {
+        const toIndex = values => {
+            const base = values.find(value => Number(value) > 0) || 1;
+            return values.map(value => Number(((Number(value || 0) / base) * 100).toFixed(2)));
+        };
+        const metrics = [
+            ['Active Users', rows.map(item => item.activeUsers), 'users'],
+            ['Token Consumption', rows.map(item => item.tokens), 'tokens'],
+            ['Coin Consumption', rows.map(item => item.coins), 'Coin'],
+            ['Transactions', rows.map(item => item.transactions), 'transactions'],
+        ];
+
+        return metrics.map(([label, values, valueLabel]) => ({
+            label,
+            data: toIndex(values),
+            rawData: values,
+            valueLabel,
+        }));
+    },
+
+    createCompareYearsControl() {
+        const state = this.state.consumption;
+        const availableYears = this.normalizeConsumptionYears(
+            (this.liveData.api?.monthly || []).map(item => String(item.year))
+        );
+        const selectedYearCount = state.selectedYears.length;
+        const summary = state.selectedYears.length
+            ? [...state.selectedYears].sort().join(', ')
+            : 'No year';
+
+        return `
+            <div class="flex items-end gap-sm">
+                <div class="filter-dropdown">
+                    <span class="control-label">Compare years</span>
+                    <button type="button" class="filter-trigger mt-xs" data-dropdown-toggle="compare-years">
+                        <span class="material-symbols-outlined text-[18px]">calendar_month</span>
+                        <span class="filter-summary">${summary}</span>
+                        <span class="material-symbols-outlined text-[18px]">expand_more</span>
+                    </button>
+                    <div id="compare-years" class="filter-popover year-popover" ${this.openDropdown === 'compare-years' ? '' : 'hidden'}>
+                        <div class="check-list">
+                            ${availableYears.map(year => {
+                                const checked = state.selectedYears.includes(year);
+                                const disabled = !checked && selectedYearCount >= 6;
+                                return `
+                                    <label class="check-option">
+                                        <input type="checkbox" data-compare-year="${year}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+                                        <span>${year}</span>
+                                    </label>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="filter-reset-button" data-reset-compare-years title="Reset compare years to the latest year">
+                    <span class="material-symbols-outlined text-[18px]">restart_alt</span>
+                    <span>Reset years</span>
+                </button>
+            </div>
+        `;
+    },
+
+    getConsumptionMonthlyValueData(metric = 'tokens', cumulative = false) {
+        const live = this.liveData.api;
+        const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const availableYears = this.normalizeConsumptionYears(
+            (live.monthly || []).map(item => String(item.year))
+        );
+        const years = this.state.consumption.selectedYears
+            .filter(year => availableYears.includes(String(year)))
+            .slice(0, 6);
+
+        return {
+            labels,
+            series: years.map(year => {
+                let running = 0;
+                return {
+                    label: String(year),
+                    data: labels.map(month => {
+                        const value = Number(
+                            live.monthly.find(item => String(item.year) === String(year) && item.month === month)?.[metric] || 0
+                        );
+                        running += value;
+                        return cumulative ? running : value;
+                    }),
+                };
+            }),
+        };
+    },
+
+    getConsumptionMonthlyTokenData(cumulative = false) {
+        return this.getConsumptionMonthlyValueData('tokens', cumulative);
+    },
+
+    getConsumptionMonthlyCoinData(cumulative = false) {
+        return this.getConsumptionMonthlyValueData('coins', cumulative);
+    },
+
+    createDashboardV2Page() {
+        const kpis = this.getDashboardKpis();
+        const rows = this.getDashboardTrendRows();
+        const granularity = rows[0]?.granularity || this.getDateGranularity(this.state.dashboard.filter.date);
+        const stats = this.getDashboardTrendStats(rows);
+        const periodLabel = this.getPeriodScopeLabel(granularity);
+        const overviewSeries = this.getDashboardOverviewSeries(rows);
+        const latest = rows[rows.length - 1] || {};
+
+        return `
+            ${this.createPageHeader(
+                'Dashboard V2',
+                'Overview growth across users, tokens, coins, and transactions.',
+                this.createFilterToolbar('dashboard')
+            )}
+
+            <div class="grid grid-cols-4 gap-gutter mb-gutter">
+                ${kpis.map(k => this.createKPICard(k.label, k.value, k.change, k.icon, k.type)).join('')}
+            </div>
+
+            <div class="bento-grid mb-gutter">
+                <section class="col-span-8 glass-panel rounded-lg p-lg">
+                    <div class="flex justify-between items-start gap-md mb-md">
+                        <div>
+                            <h3 class="font-title-lg text-title-lg text-on-surface">Overview Trend</h3>
+                            <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Indexed area chart for active users, token consumption, Coin consumption, and transactions.</p>
+                        </div>
+                        <span class="tag-pill px-sm py-xs text-label-md">${periodLabel}</span>
+                    </div>
+                    <div class="chart-container-lg">
+                        <canvas id="dashboardOverviewAreaChart"></canvas>
+                    </div>
+                </section>
+                <section class="col-span-4 glass-panel rounded-lg p-lg">
+                    <h3 class="font-title-lg text-title-lg text-on-surface mb-md">Latest Snapshot</h3>
+                    <div class="grid gap-sm">
+                        ${overviewSeries.map(item => {
+                            const raw = item.rawData[item.rawData.length - 1] || 0;
+                            const formatted = item.valueLabel === 'tokens'
+                                ? this.formatTokenUnits(raw)
+                                : item.valueLabel === 'Coin'
+                                    ? `${Number(raw).toLocaleString(undefined, { maximumFractionDigits: 0 })} Coin`
+                                    : Number(raw).toLocaleString();
+                            return `
+                                <div class="flex justify-between items-center gap-sm rounded border border-outline-variant p-sm">
+                                    <span class="font-label-md text-label-md text-on-surface-variant">${item.label}</span>
+                                    <span class="font-label-md text-label-md text-on-surface text-right">${formatted}</span>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                    <div class="pt-md mt-md border-t border-outline-variant">
+                        <p class="font-label-md text-label-md text-on-surface-variant">Total transactions</p>
+                        <div class="font-headline-lg text-headline-lg text-primary mt-xs">${stats.totalTransactions.toLocaleString()}</div>
+                    </div>
+                    <div class="pt-md border-t border-outline-variant">
+                        <p class="font-label-md text-label-md text-on-surface-variant">Peak period</p>
+                        <div class="font-title-lg text-title-lg text-on-surface mt-xs">${stats.peak?.label || '-'}</div>
+                        <p class="font-body-md text-body-md text-on-surface-variant mt-xs">${(stats.peak?.transactions || 0).toLocaleString()} transactions</p>
+                    </div>
+                </section>
+            </div>
+
+            <section class="glass-panel rounded-lg p-lg">
+                <div class="flex justify-between items-center mb-md">
+                    <h3 class="font-title-lg text-title-lg text-on-surface">Trending Note Topics</h3>
+                    <span class="font-label-md text-label-md text-on-surface-variant">${latest.label || this.getFilterLabel('dashboard')}</span>
+                </div>
+                <div class="flex flex-wrap gap-sm">
+                    ${this.createTagPills(this.liveData.dashboard.topics, [0, 2, 4])}
+                </div>
+            </section>
+        `;
+    },
+
+    createDashboardV3Page() {
+        const kpis = this.getDashboardKpis();
+        const rows = this.getDashboardTrendRows();
+        const granularity = rows[0]?.granularity || this.getDateGranularity(this.state.dashboard.filter.date);
+        const stats = this.getDashboardTrendStats(rows);
+        const periodLabel = this.getPeriodScopeLabel(granularity);
+        const tokenPerTransaction = stats.totalTransactions
+            ? stats.totalTokens / stats.totalTransactions
+            : 0;
+
+        return `
+            ${this.createPageHeader(
+                'Dashboard V3',
+                'Demand and AI workload in one view for a cleaner executive read.',
+                this.createFilterToolbar('dashboard')
+            )}
+
+            <div class="bento-grid mb-gutter">
+                <section class="col-span-8 glass-panel rounded-lg p-lg">
+                    <div class="flex justify-between items-start gap-md mb-md">
+                        <div>
+                            <h3 class="font-title-lg text-title-lg text-on-surface">Workload Overview</h3>
+                            <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Transactions are plotted against token volume on a separate axis.</p>
+                        </div>
+                        <span class="tag-pill px-sm py-xs text-label-md">${periodLabel}</span>
+                    </div>
+                    <div class="chart-container-lg">
+                        <canvas id="dashboardWorkloadChart"></canvas>
+                    </div>
+                </section>
+                <section class="col-span-4 glass-panel rounded-lg p-lg">
+                    <h3 class="font-title-lg text-title-lg text-on-surface mb-md">Workload Signals</h3>
+                    <div class="grid gap-md">
+                        <div class="rounded border border-outline-variant p-md">
+                            <p class="font-label-md text-label-md text-on-surface-variant">Total tokens</p>
+                            <div class="font-headline-md text-headline-md text-primary mt-xs">${this.formatTokenUnits(stats.totalTokens)}</div>
+                        </div>
+                        <div class="rounded border border-outline-variant p-md">
+                            <p class="font-label-md text-label-md text-on-surface-variant">Tokens / transaction</p>
+                            <div class="font-headline-md text-headline-md text-on-surface mt-xs">${this.formatTokenUnits(tokenPerTransaction)}</div>
+                        </div>
+                        <div class="rounded border border-outline-variant p-md">
+                            <p class="font-label-md text-label-md text-on-surface-variant">Peak transaction period</p>
+                            <div class="font-title-md text-title-md text-on-surface mt-xs">${stats.peak?.label || '-'}</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <div class="grid grid-cols-4 gap-gutter mb-gutter">
+                ${kpis.map(k => this.createKPICard(k.label, k.value, k.change, k.icon, k.type)).join('')}
+            </div>
+
+            <section class="glass-panel rounded-lg p-lg">
+                <div class="flex justify-between items-center mb-md">
+                    <h3 class="font-title-lg text-title-lg text-on-surface">Trending Note Topics</h3>
+                    <span class="font-headline-md text-headline-md text-on-surface">#</span>
+                </div>
+                <div class="flex flex-wrap gap-sm">
+                    ${this.createTagPills(this.liveData.dashboard.topics, [0, 2, 4])}
+                </div>
+            </section>
+        `;
+    },
+
+    createConsumptionV2Page() {
+        const live = this.liveData.api;
+        const state = this.state.consumption;
+        const costs = {
+            current: Number(live.costs.currentBillingCycle || 0),
+            projected: Number(live.costs.projectedEndOfMonth || 0),
+            change: Number(live.costs.usageChange || 0),
+            changePercent: live.costs.changePercent,
+            currentTokens: Number(live.costs.currentTokenConsumption || 0),
+            tokenChangePercent: live.costs.tokenChangePercent,
+        };
+        const activeFamily = state.drilldownApp;
+        const apps = (activeFamily ? live.models : live.providers).slice(0, 8).map((item, index) => ({
+            id: activeFamily ? `model-${index}` : item.family,
+            modelName: item.modelName || item.family,
+            appName: item.modelName || item.family,
+            tokens: Number(item.tokens || 0),
+            percentage: Number(item.percentage || 0),
+        }));
+        const activeApp = activeFamily ? { appName: activeFamily } : null;
+        const chartItems = apps;
+        const chartColors = Charts.getThemePalette(chartItems.length);
+        const allRows = live.hierarchy.map(row => ({
+            ...row,
+            tokensUsed: Number(row.tokensUsed || 0),
+            coinConsumption: Number(row.coinConsumption || 0),
+        }));
+        const totalPages = Math.max(1, Math.ceil(allRows.length / state.hierarchyPageSize));
+        if (state.hierarchyPage > totalPages) state.hierarchyPage = totalPages;
+        const start = (state.hierarchyPage - 1) * state.hierarchyPageSize;
+        const rows = allRows.slice(start, start + state.hierarchyPageSize);
+        const tokenTotal = costs.currentTokens || allRows.reduce((sum, item) => sum + item.tokensUsed, 0);
+        const latencyRows = (live.latency || []).map(row => ({
+            id: row.id,
+            label: row.label,
+            groupLabel: row.groupLabel,
+            avgLatency: Number(row.avgLatency || 0),
+            p95Latency: Number(row.p95Latency || 0),
+            events: Number(row.events || 0),
+        }));
+        const latencyTitle = state.latencyApp
+            ? `${state.latencyAppLabel || 'Selected app'} Model Latency`
+            : 'App Latency';
+
+        return `
+            ${this.createPageHeader(
+                'Consumption V2',
+                'Token, Coin, hierarchy, and latency view using the shared live filter.',
+                this.createFilterToolbar('consumption')
+            )}
+
+            <div class="bento-grid mb-gutter">
+                <section class="col-span-8 glass-panel rounded-lg p-lg min-h-[520px]">
+                    <div class="flex justify-between items-start gap-md mb-md">
+                        <div>
+                            ${activeApp ? `
+                                <button type="button" class="inline-flex items-center gap-xs text-primary font-label-md mb-sm" data-app-back>
+                                    <span class="material-symbols-outlined text-[18px]">arrow_back</span> Back to apps
+                                </button>
+                            ` : ''}
+                            <h3 class="font-title-lg text-title-lg text-on-surface">
+                                ${activeApp ? `${activeApp.appName} · Model usage` : 'App Token Consumption'}
+                            </h3>
+                            <p class="font-label-md text-label-md text-on-surface-variant mt-xs">
+                                ${activeApp ? 'Token distribution by model within this app.' : 'Runtime model usage from the dashboard database.'}
+                            </p>
+                        </div>
+                        <span class="tag-pill px-sm py-xs text-label-md">${this.getFilterLabel('consumption')}</span>
+                    </div>
+                    <div class="grid grid-cols-[minmax(0,1fr)_220px] gap-lg items-center consumption-chart-layout">
+                        <div class="chart-container-lg">
+                            <canvas id="consumptionV2ModelChart"></canvas>
+                        </div>
+                        <div class="space-y-xs">
+                            ${chartItems.map((item, index) => `
+                                <button type="button" class="legend-button" ${activeApp ? '' : `data-app-drilldown="${item.id}"`}>
+                                    <span class="w-3 h-3 rounded-full" style="background-color:${chartColors[index]}"></span>
+                                    <span>
+                                        <span class="block font-label-md text-label-md text-on-surface">${item.appName || item.modelName}</span>
+                                        <span class="block font-body-md text-body-md text-on-surface-variant">${this.formatTokenUnits(item.tokens)} Tokens</span>
+                                    </span>
+                                    ${activeApp ? '' : '<span class="material-symbols-outlined text-[18px] text-on-surface-variant">chevron_right</span>'}
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                </section>
+
+                <section class="col-span-4 grid grid-rows-2 gap-gutter min-h-[520px]">
+                    ${this.createKPICard(
+                        'Coin Consumption',
+                        `${costs.current.toLocaleString(undefined, { maximumFractionDigits: 1 })} Coin`,
+                        this.formatComparison(costs.changePercent),
+                        'toll',
+                        this.comparisonType(costs.changePercent)
+                    )}
+                    ${this.createKPICard(
+                        'Token Consumption',
+                        this.formatTokenUnits(tokenTotal),
+                        this.formatComparison(costs.tokenChangePercent),
+                        'token',
+                        this.comparisonType(costs.tokenChangePercent)
+                    )}
+                </section>
+            </div>
+
+            <section class="glass-panel rounded-lg p-lg mb-gutter">
+                <div class="flex justify-between items-start gap-lg mb-md">
+                    <div>
+                        <h3 class="font-title-lg text-title-lg text-on-surface">Monthly Usage</h3>
+                        <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Compare monthly token and Coin volume across up to 6 years.</p>
+                    </div>
+                    ${this.createCompareYearsControl()}
+                </div>
+                <div class="grid grid-cols-2 gap-gutter">
+                    <div>
+                        <div class="flex items-center justify-between mb-sm">
+                            <h4 class="font-title-md text-title-md text-on-surface">Monthly Tokens Used</h4>
+                            <span class="material-symbols-outlined text-on-surface-variant">token</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="consumptionLineChart"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex items-center justify-between mb-sm">
+                            <h4 class="font-title-md text-title-md text-on-surface">Monthly Coins Used</h4>
+                            <span class="material-symbols-outlined text-on-surface-variant">toll</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="consumptionCoinChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="glass-panel rounded-lg p-lg mb-gutter">
+                <div class="flex justify-between items-start gap-md mb-md">
+                    <div>
+                        ${state.latencyApp ? `
+                            <button type="button" class="inline-flex items-center gap-xs text-primary font-label-md mb-sm" data-latency-back>
+                                <span class="material-symbols-outlined text-[18px]">arrow_back</span> Back to apps
+                            </button>
+                        ` : ''}
+                        <h3 class="font-title-lg text-title-lg text-on-surface">${latencyTitle}</h3>
+                        <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Average model response latency from model usage events.</p>
+                    </div>
+                    <span class="tag-pill px-sm py-xs text-label-md">${state.latencyApp ? 'Models' : 'Apps'}</span>
+                </div>
+                <div class="grid grid-cols-[minmax(0,1fr)_260px] gap-lg items-center consumption-chart-layout">
+                    <div class="chart-container-lg">
+                        <canvas id="consumptionLatencyChart"></canvas>
+                    </div>
+                    <div class="space-y-xs">
+                        ${latencyRows.map(row => `
+                            <button type="button" class="legend-button" ${state.latencyApp ? '' : `data-latency-app="${row.id}" data-latency-label="${row.label}"`}>
+                                <span>
+                                    <span class="block font-label-md text-label-md text-on-surface">${row.label}</span>
+                                    <span class="block font-body-md text-body-md text-on-surface-variant">
+                                        Avg ${row.avgLatency.toFixed(2)}s · P95 ${row.p95Latency.toFixed(2)}s · ${row.events.toLocaleString()} events
+                                    </span>
+                                </span>
+                                ${state.latencyApp ? '' : '<span class="material-symbols-outlined text-[18px] text-on-surface-variant">chevron_right</span>'}
+                            </button>
+                        `).join('') || '<p class="font-body-md text-body-md text-on-surface-variant">No latency data matches the selected filters.</p>'}
+                    </div>
+                </div>
+            </section>
+
+            <section class="glass-panel rounded-lg overflow-hidden">
+                <div class="flex justify-between items-center p-lg">
+                    <div>
+                        <h3 class="font-title-lg text-title-lg text-on-surface">Usage by Hierarchy</h3>
+                        <p class="font-label-md text-label-md text-on-surface-variant mt-xs">${this.getFilterLabel('consumption')}</p>
+                    </div>
+                    <span class="font-label-md text-label-md text-on-surface-variant">${state.selectedYears.length}/6 years selected</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-body-md data-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left">Campus</th>
+                                <th class="text-left">Faculty/Division</th>
+                                <th class="text-left">Department/Unit</th>
+                                <th class="text-right">Tokens Used</th>
+                                <th class="text-right">Coin Used</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows.map(row => `
+                                <tr>
+                                    <td>${row.campus}</td>
+                                    <td>${row.faculty}</td>
+                                    <td>${row.department}</td>
+                                    <td class="text-right">${this.formatTokenUnits(row.tokensUsed)}</td>
+                                    <td class="text-right">${row.coinConsumption.toLocaleString(undefined, { maximumFractionDigits: 0 })} Coin</td>
+                                </tr>
+                            `).join('') || '<tr><td colspan="5" class="text-center text-on-surface-variant">No usage matches the selected hierarchy.</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            ${this.createPagination(totalPages, state.hierarchyPage, 'consumption')}
+        `;
+    },
+
+    createConsumptionV3Page() {
+        const tokenData = this.getConsumptionMonthlyTokenData(true);
+        const yearTotals = tokenData.series.map(item => ({
+            label: item.label,
+            total: item.data[item.data.length - 1] || 0,
+        })).sort((a, b) => b.total - a.total);
+        const topYear = yearTotals[0];
+
+        return `
+            ${this.createPageHeader(
+                'Consumption V3',
+                'Cumulative token burn-up for year-over-year pacing.',
+                this.createFilterToolbar('consumption')
+            )}
+
+            <div class="bento-grid mb-gutter">
+                <section class="col-span-9 glass-panel rounded-lg p-lg">
+                    <div class="flex justify-between items-start gap-lg mb-md">
+                        <div>
+                            <h3 class="font-title-lg text-title-lg text-on-surface">Cumulative Token Pace</h3>
+                            <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Each line accumulates monthly tokens so growth pace is easier to compare.</p>
+                        </div>
+                        ${this.createCompareYearsControl()}
+                    </div>
+                    <div class="chart-container-lg">
+                        <canvas id="consumptionCumulativeChart"></canvas>
+                    </div>
+                </section>
+                <section class="col-span-3 glass-panel rounded-lg p-lg">
+                    <h3 class="font-title-lg text-title-lg text-on-surface mb-md">Year Ranking</h3>
+                    <div class="space-y-sm">
+                        ${yearTotals.map((item, index) => `
+                            <div class="flex justify-between items-center gap-sm rounded border border-outline-variant p-sm">
+                                <span class="font-label-md text-label-md text-on-surface">${index + 1}. ${item.label}</span>
+                                <span class="font-label-md text-label-md text-primary">${this.formatTokenUnits(item.total)}</span>
+                            </div>
+                        `).join('') || '<p class="font-body-md text-body-md text-on-surface-variant">No yearly token data.</p>'}
+                    </div>
+                    <div class="mt-md pt-md border-t border-outline-variant">
+                        <p class="font-label-md text-label-md text-on-surface-variant">Highest token year</p>
+                        <div class="font-headline-md text-headline-md text-primary mt-xs">${topYear?.label || '-'}</div>
+                    </div>
+                </section>
+            </div>
+        `;
+    },
+
+    createBehaviorV2Page() {
+        const live = this.liveData.behavior;
+        const behaviorGranularity = live.granularity || this.getDateGranularity(this.state.behavior.filter.date);
+        const activeUsers = live.dailyUsers.map(item => ({
+            day: this.formatTrendPeriod(item, behaviorGranularity),
+            users: Number(item.users || 0),
+        }));
+        const appDist = live.apps
+            .map(app => ({ ...app, percentage: Number(app.percentage || 0) }))
+            .sort((a, b) => b.percentage - a.percentage);
+        const averageUsers = Math.round(
+            activeUsers.reduce((sum, item) => sum + item.users, 0) / Math.max(1, activeUsers.length)
+        );
+        const appColors = Charts.getThemePalette(appDist.length);
+        const totalAppTransactions = appDist.reduce((sum, app) => sum + Number(app.usageCount || 0), 0);
+
+        return `
+            ${this.createPageHeader(
+                'User Behavior V2',
+                'Active usage patterns with app distribution as a horizontal bar chart.',
+                this.createFilterToolbar('behavior')
+            )}
+
+            <div class="bento-grid mb-gutter">
+                <section class="col-span-4 glass-panel rounded-lg p-lg min-h-[260px] flex flex-col justify-between">
+                    <div class="flex items-start gap-sm">
+                        <span class="material-symbols-outlined text-primary">description</span>
+                        <h3 class="font-title-lg text-title-lg text-on-surface">Total Notes Generated</h3>
+                    </div>
+                    <div>
+                        <div class="font-display-lg text-display-lg text-primary mb-sm">${Number(live.kpi.totalNotesGenerated || 0).toLocaleString()}</div>
+                        <p class="font-label-md text-label-md text-on-surface-variant">${this.formatComparison(live.kpi.changePercent)}</p>
+                    </div>
+                </section>
+                <section class="col-span-8 glass-panel rounded-lg p-lg">
+                    <div class="flex justify-between items-center mb-md">
+                        <h3 class="font-title-lg text-title-lg text-on-surface flex items-center gap-sm">
+                            <span class="material-symbols-outlined text-primary">groups</span> Active Users
+                        </h3>
+                        <span class="font-label-md text-label-md text-on-surface-variant">Avg: ${averageUsers.toLocaleString()}</span>
+                    </div>
+                    <div class="chart-container"><canvas id="dailyChart"></canvas></div>
+                </section>
+            </div>
+
+            <div class="bento-grid">
+                <section class="col-span-5 glass-panel rounded-lg p-lg">
+                    <div class="flex justify-between items-start gap-md mb-md">
+                        <div>
+                            <h3 class="font-title-lg text-title-lg text-on-surface flex items-center gap-sm">
+                                <span class="material-symbols-outlined text-primary">apps</span> App Usage
+                            </h3>
+                            <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Transaction share by app.</p>
+                        </div>
+                        <span class="tag-pill px-sm py-xs text-label-md">${totalAppTransactions.toLocaleString()} tx</span>
+                    </div>
+                    <div class="grid grid-cols-[minmax(0,1fr)_190px] gap-lg items-center consumption-chart-layout">
+                        <div class="chart-container">
+                            <canvas id="behaviorV2AppDonut"></canvas>
+                        </div>
+                        <div class="space-y-xs">
+                            ${appDist.map((app, index) => `
+                                <div class="flex justify-between items-center gap-sm">
+                                    <span class="flex items-center gap-sm min-w-0">
+                                        <span class="w-3 h-3 rounded-full shrink-0" style="background-color:${appColors[index]}"></span>
+                                        <span class="font-label-md text-label-md text-on-surface truncate">${app.app}</span>
+                                    </span>
+                                    <span class="font-label-md text-label-md text-on-surface-variant">${app.percentage.toFixed(2)}%</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </section>
+
+                <section class="col-span-7 glass-panel rounded-lg p-lg">
+                    <div class="flex justify-between items-start gap-md mb-md">
+                        <div>
+                            <h3 class="font-title-lg text-title-lg text-on-surface flex items-center gap-sm">
+                                <span class="material-symbols-outlined text-primary">bar_chart</span> Top Active Apps
+                            </h3>
+                            <p class="font-label-md text-label-md text-on-surface-variant mt-xs">${this.getFilterLabel('behavior')}</p>
+                        </div>
+                        <span class="tag-pill px-sm py-xs text-label-md">${appDist.length} apps</span>
+                    </div>
+                    <div class="chart-container-lg">
+                        <canvas id="behaviorAppsBarChart"></canvas>
+                    </div>
+                </section>
+            </div>
+        `;
+    },
+
     createConsumptionPage() {
         const state = this.state.consumption;
         const live = this.liveData.api;
@@ -34,7 +675,10 @@ Object.assign(App, {
         const activeApp = activeFamily ? { appName: activeFamily } : null;
         const chartItems = apps;
         const chartColors = Charts.getThemePalette(chartItems.length);
-        const availableYears = [...new Set(live.monthly.map(item => String(item.year)))].sort();
+        const availableYears = this.normalizeConsumptionYears(
+            live.monthly.map(item => String(item.year))
+        );
+        const selectedYearCount = state.selectedYears.length;
 
         return `
             ${this.createPageHeader(
@@ -124,25 +768,35 @@ Object.assign(App, {
                 <div class="flex justify-between items-start gap-lg mb-md">
                     <div>
                         <h3 class="font-title-lg text-title-lg text-on-surface">Monthly Tokens Used</h3>
-                        <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Compare years available in the current dataset.</p>
+                        <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Compare up to 6 years available in the current dataset.</p>
                     </div>
-                    <div class="filter-dropdown">
-                        <span class="control-label">Compare years</span>
-                        <button type="button" class="filter-trigger mt-xs" data-dropdown-toggle="compare-years">
-                            <span class="material-symbols-outlined text-[18px]">calendar_month</span>
-                            <span class="filter-summary">${[...state.selectedYears].sort().join(', ')}</span>
-                            <span class="material-symbols-outlined text-[18px]">expand_more</span>
-                        </button>
-                        <div id="compare-years" class="filter-popover year-popover" ${this.openDropdown === 'compare-years' ? '' : 'hidden'}>
-                            <div class="check-list">
-                                ${availableYears.map(year => `
-                                    <label class="check-option">
-                                        <input type="checkbox" data-compare-year="${year}" ${state.selectedYears.includes(year) ? 'checked' : ''}>
-                                        <span>${year}</span>
-                                    </label>
-                                `).join('')}
+                    <div class="flex items-end gap-sm">
+                        <div class="filter-dropdown">
+                            <span class="control-label">Compare years</span>
+                            <button type="button" class="filter-trigger mt-xs" data-dropdown-toggle="compare-years">
+                                <span class="material-symbols-outlined text-[18px]">calendar_month</span>
+                                <span class="filter-summary">${[...state.selectedYears].sort().join(', ')}</span>
+                                <span class="material-symbols-outlined text-[18px]">expand_more</span>
+                            </button>
+                            <div id="compare-years" class="filter-popover year-popover" ${this.openDropdown === 'compare-years' ? '' : 'hidden'}>
+                                <div class="check-list">
+                                    ${availableYears.map(year => {
+                                        const checked = state.selectedYears.includes(year);
+                                        const disabled = !checked && selectedYearCount >= 6;
+                                        return `
+                                            <label class="check-option">
+                                                <input type="checkbox" data-compare-year="${year}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+                                                <span>${year}</span>
+                                            </label>
+                                        `;
+                                    }).join('')}
+                                </div>
                             </div>
                         </div>
+                        <button type="button" class="filter-reset-button" data-reset-compare-years title="Reset compare years to the latest year">
+                            <span class="material-symbols-outlined text-[18px]">restart_alt</span>
+                            <span>Reset years</span>
+                        </button>
                     </div>
                 </div>
                 <div class="chart-container">
@@ -181,7 +835,7 @@ Object.assign(App, {
                                     <td>${row.campus}</td>
                                     <td>${row.faculty}</td>
                                     <td>${row.department}</td>
-                                    <td class="text-right">${row.tokensUsed.toLocaleString()}</td>
+                                    <td class="text-right">${this.formatTokenUnits(row.tokensUsed)}</td>
                                 </tr>
                             `).join('') || '<tr><td colspan="4" class="text-center text-on-surface-variant">No usage matches the selected hierarchy.</td></tr>'}
                         </tbody>
@@ -227,7 +881,7 @@ Object.assign(App, {
 
             <div class="bento-grid mb-gutter">
                 <div class="col-span-5 grid grid-cols-2 gap-gutter">
-                    ${this.createKPICard('Total Tokens', this.formatCompact(tokenTotal), this.formatComparison(changes.totalTokens), 'token', this.comparisonType(changes.totalTokens))}
+                    ${this.createKPICard('Total Tokens', this.formatTokenUnits(tokenTotal), this.formatComparison(changes.totalTokens), 'token', this.comparisonType(changes.totalTokens))}
                     ${this.createKPICard('Active Users', activeUsers.toLocaleString(), this.formatComparison(changes.activeUsers), 'group', this.comparisonType(changes.activeUsers))}
                     <section class="col-span-2 rounded-lg p-lg min-h-[190px] border relative overflow-hidden theme-accent-panel">
                         <span class="material-symbols-outlined absolute right-6 top-1/2 -translate-y-1/2 text-[120px] leading-none text-primary/10">toll</span>
@@ -304,7 +958,7 @@ Object.assign(App, {
                                     <td>${dept.campus}</td>
                                     <td class="font-semibold">${dept.name}</td>
                                     <td>${dept.faculty}</td>
-                                    <td class="text-right">${dept.totalModelsUsed.toLocaleString()}</td>
+                                    <td class="text-right">${this.formatTokenUnits(dept.totalModelsUsed)}</td>
                                     <td class="text-right">${dept.coinConsumption.toLocaleString()} Coin</td>
                                 </tr>
                             `).join('') || '<tr><td colspan="5" class="text-center text-on-surface-variant">No departments match the selected filters.</td></tr>'}
@@ -318,12 +972,13 @@ Object.assign(App, {
 
     createBehaviorPage() {
         const live = this.liveData.behavior;
+        const behaviorGranularity = live.granularity || this.getDateGranularity(this.state.behavior.filter.date);
         const data = {
             totalNotes: Number(live.kpi.totalNotesGenerated || 0),
             changePercent: live.kpi.changePercent,
             tags: live.tags,
             activeUsers: live.dailyUsers.map(item => ({
-                day: new Date(item.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
+                day: this.formatTrendPeriod(item, behaviorGranularity),
                 users: Number(item.users || 0),
             })),
         };
@@ -378,7 +1033,7 @@ Object.assign(App, {
                             <span class="material-symbols-outlined text-primary">groups</span> Active Users
                         </h3>
                         <span class="font-label-md text-label-md text-on-surface-variant">
-                            Avg: ${Math.round(data.activeUsers.reduce((sum, item) => sum + item.users, 0) / Math.max(1, data.activeUsers.length)).toLocaleString()}/day
+                            Avg: ${Math.round(data.activeUsers.reduce((sum, item) => sum + item.users, 0) / Math.max(1, data.activeUsers.length)).toLocaleString()}/${behaviorGranularity === 'day' ? 'day' : behaviorGranularity === 'year' ? 'year' : 'month'}
                         </span>
                     </div>
                     <div class="chart-container"><canvas id="dailyChart"></canvas></div>
@@ -394,7 +1049,7 @@ Object.assign(App, {
                                 <span class="flex items-center gap-sm">
                                     <span class="w-3 h-3 rounded-full" style="background-color:${appColors[index]}"></span>${app.app}
                                 </span>
-                                <span class="font-label-md text-label-md text-on-surface-variant">${app.percentage}%</span>
+                                <span class="font-label-md text-label-md text-on-surface-variant">${app.percentage.toFixed(2)}%</span>
                             </div>
                         `).join('')}
                     </div>
@@ -680,10 +1335,34 @@ Object.assign(App, {
     },
 
     initCharts(page) {
+        if (page === 'dashboardv2') {
+            const rows = this.getDashboardTrendRows();
+            Charts.createOverviewAreaChart(
+                'dashboardOverviewAreaChart',
+                rows.map(item => item.label),
+                this.getDashboardOverviewSeries(rows)
+            );
+            return;
+        }
+
+        if (page === 'dashboardv3') {
+            const rows = this.getDashboardTrendRows();
+            Charts.createDualAxisComboChart(
+                'dashboardWorkloadChart',
+                rows.map(item => item.label),
+                rows.map(item => item.transactions),
+                rows.map(item => item.tokens),
+                'Transactions',
+                'Tokens'
+            );
+            return;
+        }
+
         if (page === 'dashboard') {
             const live = this.liveData.dashboard;
+            const granularity = live.granularity || this.getDateGranularity(this.state.dashboard.filter.date);
             const monthlyData = live.monthly.map(item => ({
-                month: `${item.month} ${item.year}`,
+                month: this.formatTrendPeriod(item, granularity),
                 usage: Number(item.usage || 0),
             }));
             Charts.createBarChart(
@@ -693,6 +1372,63 @@ Object.assign(App, {
                 'Monthly Usage',
                 monthlyData.length - 1
             );
+            return;
+        }
+
+        if (page === 'consumptionv2') {
+            const state = this.state.consumption;
+            const live = this.liveData.api;
+            const activeFamily = state.drilldownApp;
+            const apps = (activeFamily ? live.models : live.providers).slice(0, 8).map((item, index) => ({
+                id: activeFamily ? `model-${index}` : item.family,
+                modelName: item.modelName || item.family,
+                appName: item.modelName || item.family,
+                tokens: Number(item.tokens || 0),
+                percentage: Number(item.percentage || 0),
+            }));
+            const activeApp = activeFamily ? { appName: activeFamily } : null;
+            const chartItems = apps;
+            const total = this.formatCompact(
+                chartItems.reduce((sum, item) => sum + Number(item.tokens || 0), 0)
+            );
+            Charts.createDoughnutChart(
+                'consumptionV2ModelChart',
+                chartItems.map(item => item.appName || item.modelName),
+                chartItems.map(item => item.tokens),
+                chartItems.map(item => item.color),
+                total,
+                activeApp ? 'Model Tokens' : 'Total Tokens',
+                activeApp ? null : index => {
+                    this.state.consumption.drilldownApp = chartItems[index].id;
+                    this.render('consumptionv2');
+                },
+                {
+                    valueType: 'tokens',
+                    percentages: chartItems.map(item => item.percentage),
+                    minVisibleShare: 0.015,
+                }
+            );
+            const tokenData = this.getConsumptionMonthlyTokenData(false);
+            Charts.createMultiLineChart('consumptionLineChart', tokenData.labels, tokenData.series);
+            const coinData = this.getConsumptionMonthlyCoinData(false);
+            Charts.createMultiLineChart('consumptionCoinChart', coinData.labels, coinData.series, { valueLabel: 'Coin' });
+            const latencyData = (live.latency || []).map(item => ({
+                label: item.label,
+                avgLatency: Number(item.avgLatency || 0),
+            }));
+            Charts.createHorizontalBarChart(
+                'consumptionLatencyChart',
+                latencyData.map(item => item.label),
+                latencyData.map(item => item.avgLatency),
+                'Avg Latency',
+                { valueSuffix: 's' }
+            );
+            return;
+        }
+
+        if (page === 'consumptionv3') {
+            const tokenData = this.getConsumptionMonthlyTokenData(true);
+            Charts.createMultiLineChart('consumptionCumulativeChart', tokenData.labels, tokenData.series);
             return;
         }
 
@@ -729,30 +1465,57 @@ Object.assign(App, {
                     minVisibleShare: 0.015,
                 }
             );
-            const tokenData = (() => {
-                const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                const years = state.selectedYears.filter(year =>
-                    live.monthly.some(item => String(item.year) === year)
-                );
-                return {
-                    labels,
-                    series: years.map(year => ({
-                        label: year,
-                        data: labels.map(month => Number(
-                            live.monthly.find(item => String(item.year) === year && item.month === month)?.tokens || 0
-                        )),
-                    })),
-                };
-            })();
+            const tokenData = this.getConsumptionMonthlyTokenData(false);
             Charts.createMultiBarChart('apiMonthlyChart', tokenData.labels, tokenData.series);
+            return;
+        }
+
+        if (page === 'ubv2') {
+            const live = this.liveData.behavior;
+            const granularity = live.granularity || this.getDateGranularity(this.state.behavior.filter.date);
+            const activeUsers = live.dailyUsers.map(item => ({
+                day: this.formatTrendPeriod(item, granularity),
+                users: Number(item.users || 0),
+            }));
+            Charts.createLineChart(
+                'dailyChart',
+                activeUsers.map(item => item.day),
+                activeUsers.map(item => item.users),
+                'Active Users'
+            );
+            const appData = live.apps
+                .map(app => ({ ...app, percentage: Number(app.percentage || 0) }))
+                .sort((a, b) => b.percentage - a.percentage);
+            const totalTransactions = appData.reduce((sum, item) => sum + Number(item.usageCount || 0), 0);
+            Charts.createDoughnutChart(
+                'behaviorV2AppDonut',
+                appData.map(item => item.app),
+                appData.map(item => Number(item.usageCount || 0)),
+                appData.map(item => item.color),
+                this.formatCompact(totalTransactions),
+                'Transactions',
+                null,
+                {
+                    percentages: appData.map(item => item.percentage),
+                    percentageDecimals: 2,
+                }
+            );
+            Charts.createHorizontalBarChart(
+                'behaviorAppsBarChart',
+                appData.map(item => item.app),
+                appData.map(item => item.percentage),
+                'Usage Share',
+                { valueSuffix: '%' }
+            );
             return;
         }
 
         if (page === 'behavior') {
             const live = this.liveData.behavior;
+            const granularity = live.granularity || this.getDateGranularity(this.state.behavior.filter.date);
             const behaviorData = {
                 activeUsers: live.dailyUsers.map(item => ({
-                    day: new Date(item.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
+                    day: this.formatTrendPeriod(item, granularity),
                     users: Number(item.users || 0),
                 })),
             };
@@ -770,7 +1533,9 @@ Object.assign(App, {
                 appData.map(item => item.percentage),
                 appData.map(item => item.color),
                 String(appData.length),
-                'App groups'
+                'App groups',
+                null,
+                { percentageDecimals: 2 }
             );
         }
     },

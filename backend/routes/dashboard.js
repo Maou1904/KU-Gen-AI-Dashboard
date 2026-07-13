@@ -11,6 +11,37 @@ const {
 
 const router = express.Router();
 
+router.get('/available-years', async (req, res, next) => {
+    try {
+        const { rows } = await dashboardPool.query(
+            `WITH years AS (
+                SELECT EXTRACT(YEAR FROM event_at)::int AS year
+                FROM ${usageSource} u
+                WHERE event_at IS NOT NULL
+                UNION
+                SELECT EXTRACT(YEAR FROM event_at)::int AS year
+                FROM ${modelUsageSource} u
+                WHERE event_at IS NOT NULL
+                UNION
+                SELECT EXTRACT(YEAR FROM created_at)::int AS year
+                FROM ${noteSource} n
+                WHERE created_at IS NOT NULL
+             )
+             SELECT year
+             FROM years
+             WHERE year IS NOT NULL
+             ORDER BY year`
+        );
+        res.json({
+            success: true,
+            data: rows.map(row => Number(row.year)),
+            source: 'dashboard_test',
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
 router.get('/metrics', async (req, res, next) => {
     try {
         const filters = comparisonFilters(req);
@@ -79,33 +110,42 @@ router.get('/metrics', async (req, res, next) => {
 router.get('/monthly-usage', async (req, res, next) => {
     try {
         const filter = usageFilter(req);
+        const allowedGranularities = new Set(['day', 'month', 'year']);
+        const granularity = allowedGranularities.has(req.query.granularity)
+            ? req.query.granularity
+            : 'month';
         const { rows } = await dashboardPool.query(
-            `WITH usage_monthly AS (
+             `WITH usage_monthly AS (
                 SELECT
-                    DATE_TRUNC('month', event_at) AS month_date,
-                    COUNT(*)::bigint AS usage
+                    DATE_TRUNC('${granularity}', event_at) AS month_date,
+                    COUNT(*)::bigint AS usage,
+                    COUNT(DISTINCT user_key)::bigint AS active_users,
+                    SUM(COALESCE(total_coins, 0)) AS coins
                 FROM ${usageSource} u
                 WHERE ${filter.sql}
-                GROUP BY DATE_TRUNC('month', event_at)
+                GROUP BY DATE_TRUNC('${granularity}', event_at)
              ), model_monthly AS (
                 SELECT
-                    DATE_TRUNC('month', event_at) AS month_date,
+                    DATE_TRUNC('${granularity}', event_at) AS month_date,
                     SUM(total_tokens)::bigint AS tokens
                 FROM ${modelUsageSource} u
                 WHERE ${filter.sql}
-                GROUP BY DATE_TRUNC('month', event_at)
+                GROUP BY DATE_TRUNC('${granularity}', event_at)
              )
              SELECT
+                TO_CHAR(COALESCE(a.month_date, m.month_date), 'YYYY-MM-DD') AS date,
                 TO_CHAR(COALESCE(a.month_date, m.month_date), 'Mon') AS month,
                 EXTRACT(YEAR FROM COALESCE(a.month_date, m.month_date))::int AS year,
                 COALESCE(a.usage, 0)::bigint AS usage,
+                COALESCE(a.active_users, 0)::bigint AS "activeUsers",
+                COALESCE(a.coins, 0) AS coins,
                 COALESCE(m.tokens, 0)::bigint AS tokens
              FROM usage_monthly a
              FULL OUTER JOIN model_monthly m ON m.month_date = a.month_date
              ORDER BY COALESCE(a.month_date, m.month_date)`,
             filter.params
         );
-        res.json({ success: true, data: rows, source: 'dashboard_test' });
+        res.json({ success: true, data: rows, granularity, source: 'dashboard_test' });
     } catch (error) {
         next(error);
     }

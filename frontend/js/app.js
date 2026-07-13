@@ -5,6 +5,7 @@ const App = {
     currentDataMode: 'checking',
     openDropdown: null,
     liveData: {},
+    availableYears: [],
     state: {
         dashboard: {
             filter: {
@@ -19,6 +20,8 @@ const App = {
             },
             selectedYears: [],
             drilldownApp: null,
+            latencyApp: null,
+            latencyAppLabel: '',
             hierarchyPage: 1,
             hierarchyPageSize: 7,
         },
@@ -60,18 +63,70 @@ const App = {
         const response = await API.healthCheck();
         this.apiConnected = response !== null;
         if (this.apiConnected) {
-            const [dashboard, consumption, analytics, behavior] = await Promise.all([
+            const [dashboard, consumption, analytics, behavior, availableYears] = await Promise.all([
                 API.getDashboardMetrics(),
                 API.getCosts(),
                 API.getDepartmentKPIs(),
                 API.getBehaviorKPI(),
+                API.getAvailableYears(),
             ]);
+            this.setAvailableYears(availableYears?.success ? availableYears.data : []);
             this.applyLiveDataAsOf('dashboard', dashboard?.dataAsOf);
             this.applyLiveDataAsOf('consumption', consumption?.data?.dataAsOf);
             this.applyLiveDataAsOf('analytics', analytics?.data?.dataAsOf);
             this.applyLiveDataAsOf('behavior', behavior?.data?.dataAsOf);
         }
         this.updateAPIStatus();
+    },
+
+    setAvailableYears(years = []) {
+        const normalized = [...new Set((Array.isArray(years) ? years : [])
+            .map(item => Number(item?.year ?? item))
+            .filter(Number.isInteger))]
+            .sort((a, b) => a - b);
+        this.availableYears = normalized;
+        if (!normalized.length) return;
+
+        Object.keys(this.state).forEach(page => {
+            const filter = this.state[page]?.filter;
+            if (!filter) return;
+            const latestYear = Number(this.state[page].latestDate?.year);
+            const fallbackYear = normalized.includes(latestYear)
+                ? latestYear
+                : normalized[normalized.length - 1];
+            if (!normalized.includes(Number(filter.date.year))) {
+                filter.date.year = fallbackYear;
+            }
+        });
+    },
+
+    getAvailableYears(page) {
+        const years = new Set(this.availableYears);
+        Object.values(this.liveData).forEach(data => {
+            (data?.monthly || []).forEach(item => {
+                const year = Number(item.year);
+                if (Number.isInteger(year)) years.add(year);
+            });
+        });
+
+        const latestYear = Number(this.state[page]?.latestDate?.year);
+        const selectedYear = Number(this.state[page]?.filter?.date?.year);
+        if (!years.size && Number.isInteger(latestYear)) years.add(latestYear);
+        if (!years.size && Number.isInteger(selectedYear)) years.add(selectedYear);
+        return [...years].sort((a, b) => a - b);
+    },
+
+    ensureDateDefaults(page) {
+        const date = this.state[page].filter.date;
+        const years = this.getAvailableYears(page);
+        if (years.length && !years.includes(Number(date.year))) {
+            const latestYear = Number(this.state[page].latestDate?.year);
+            date.year = years.includes(latestYear) ? latestYear : years[years.length - 1];
+        }
+        if (!date.month) {
+            date.month = this.state[page].latestDate?.month || 1;
+        }
+        return years;
     },
 
     updateAPIStatus() {
@@ -101,6 +156,20 @@ const App = {
     updateActiveNavForPage(page) {
         const navLink = document.querySelector(`.nav-link[href="#/${page}"]`);
         if (navLink) this.updateActiveNav(navLink);
+    },
+
+    getDataPage(page) {
+        if (page === 'dashboardv2' || page === 'dashboardv3') return 'dashboard';
+        if (page === 'consumptionv2' || page === 'consumptionv3') return 'api';
+        if (page === 'ubv2') return 'behavior';
+        return page;
+    },
+
+    getStatePage(page) {
+        const dataPage = this.getDataPage(page);
+        if (dataPage === 'api') return 'consumption';
+        if (dataPage === 'department') return 'analytics';
+        return dataPage;
     },
 
     updateActiveNav(link) {
@@ -153,16 +222,38 @@ const App = {
             return;
         }
 
+        if (event.target.closest('[data-reset-compare-years]')) {
+            this.resetConsumptionYears();
+            this.openDropdown = null;
+            this.render(this.currentPage);
+            return;
+        }
+
         const appDrilldown = event.target.closest('[data-app-drilldown]');
         if (appDrilldown) {
             this.state.consumption.drilldownApp = appDrilldown.dataset.appDrilldown;
-            this.render('api');
+            this.render(this.currentPage);
             return;
         }
 
         if (event.target.closest('[data-app-back]')) {
             this.state.consumption.drilldownApp = null;
-            this.render('api');
+            this.render(this.currentPage);
+            return;
+        }
+
+        const latencyDrilldown = event.target.closest('[data-latency-app]');
+        if (latencyDrilldown) {
+            this.state.consumption.latencyApp = latencyDrilldown.dataset.latencyApp;
+            this.state.consumption.latencyAppLabel = latencyDrilldown.dataset.latencyLabel || '';
+            this.render(this.currentPage);
+            return;
+        }
+
+        if (event.target.closest('[data-latency-back]')) {
+            this.state.consumption.latencyApp = null;
+            this.state.consumption.latencyAppLabel = '';
+            this.render(this.currentPage);
             return;
         }
 
@@ -223,7 +314,7 @@ const App = {
                 ? Number(dateSelect.value)
                 : dateSelect.value;
             if (dateField !== 'mode') date.mode = date.mode === 'custom' ? 'month' : date.mode;
-            date.range = [];
+            if (dateField !== 'mode' || date.mode !== 'custom') date.range = [];
             this.resetPage(filterPage);
             this.render(this.currentPage);
             return;
@@ -233,13 +324,23 @@ const App = {
         if (yearCheckbox) {
             const year = yearCheckbox.dataset.compareYear;
             const selected = this.state.consumption.selectedYears;
-            if (yearCheckbox.checked) selected.push(year);
-            else this.state.consumption.selectedYears = selected.filter(value => value !== year);
+            if (yearCheckbox.checked) {
+                if (!selected.includes(year)) {
+                    if (selected.length >= 6) {
+                        yearCheckbox.checked = false;
+                        this.openDropdown = 'compare-years';
+                        return;
+                    }
+                    selected.push(year);
+                }
+            } else {
+                this.state.consumption.selectedYears = selected.filter(value => value !== year);
+            }
             if (!this.state.consumption.selectedYears.length) {
                 this.state.consumption.selectedYears = [year];
             }
             this.openDropdown = 'compare-years';
-            this.render('api');
+            this.render(this.currentPage);
             return;
         }
 
@@ -252,10 +353,11 @@ const App = {
     async render(page) {
         const container = document.getElementById('page-container');
         container.innerHTML = '<div class="flex items-center justify-center h-full"><span class="text-on-surface-variant">Loading...</span></div>';
+        const dataPage = this.getDataPage(page);
 
         if (page !== 'settings') {
             if (this.apiConnected) await this.loadLivePageData(page);
-            if (!this.liveData[page]) {
+            if (!this.liveData[dataPage]) {
                 this.currentDataMode = 'unavailable';
                 this.updateAPIStatus();
                 container.innerHTML = this.createDataUnavailablePage();
@@ -268,14 +370,29 @@ const App = {
             case 'dashboard':
                 content = this.createDashboardPage();
                 break;
+            case 'dashboardv2':
+                content = this.createDashboardV2Page();
+                break;
+            case 'dashboardv3':
+                content = this.createDashboardV3Page();
+                break;
             case 'api':
                 content = this.createConsumptionPage();
+                break;
+            case 'consumptionv2':
+                content = this.createConsumptionV2Page();
+                break;
+            case 'consumptionv3':
+                content = this.createConsumptionV3Page();
                 break;
             case 'department':
                 content = this.createAnalyticsPage();
                 break;
             case 'behavior':
                 content = this.createBehaviorPage();
+                break;
+            case 'ubv2':
+                content = this.createBehaviorV2Page();
                 break;
             case 'settings':
                 content = this.createSettingsPage();
@@ -300,9 +417,8 @@ const App = {
     async loadLivePageData(page) {
         const successful = response => response?.success ? response.data : null;
         let data = null;
-        const statePage = page === 'api' ? 'consumption'
-            : page === 'department' ? 'analytics'
-                : page;
+        const dataPage = this.getDataPage(page);
+        const statePage = this.getStatePage(page);
         const query = this.buildApiQuery(statePage);
 
         if (!this.liveHierarchy) {
@@ -310,7 +426,7 @@ const App = {
             this.liveHierarchy = successful(hierarchy);
         }
 
-        if (page === 'dashboard') {
+        if (dataPage === 'dashboard') {
             const [metrics, monthly, topics] = await Promise.all([
                 API.getDashboardMetrics(query),
                 API.getMonthlyUsage(query),
@@ -321,19 +437,23 @@ const App = {
                 data = {
                     metrics: successful(metrics),
                     monthly: successful(monthly),
+                    granularity: monthly.granularity || this.getDateGranularity(this.state.dashboard.filter.date),
                     topics: successful(topics),
                 };
             }
         }
 
-        if (page === 'api') {
+        if (dataPage === 'api') {
             const family = this.state.consumption.drilldownApp;
-            const [providers, models, hierarchy, costs, monthly] = await Promise.all([
+            const latencyApp = this.state.consumption.latencyApp;
+            const latencyQuery = `${query}${query ? '&' : '?'}${latencyApp ? `appKey=${encodeURIComponent(latencyApp)}` : ''}`.replace(/[?&]$/, '');
+            const [providers, models, hierarchy, costs, monthly, latency] = await Promise.all([
                 API.getProviderConsumption(query),
                 API.getModelConsumption(`${query}${query ? '&' : '?'}${family ? `family=${encodeURIComponent(family)}` : ''}`.replace(/[?&]$/, '')),
                 API.getHierarchyData(query),
                 API.getCosts(query),
                 API.getMonthlyUsage(),
+                API.getModelLatency(latencyQuery),
             ]);
             if (providers && models && hierarchy && costs && monthly) {
                 this.applyLiveDataAsOf('consumption', costs.data?.dataAsOf);
@@ -344,11 +464,13 @@ const App = {
                     hierarchyMeta: hierarchy.meta || {},
                     costs: successful(costs),
                     monthly: successful(monthly),
+                    latency: successful(latency) || [],
+                    latencyMode: latency?.mode || (latencyApp ? 'models' : 'apps'),
                 };
             }
         }
 
-        if (page === 'department') {
+        if (dataPage === 'department') {
             const [summary, kpis, heatmap] = await Promise.all([
                 API.getDepartmentSummary(query),
                 API.getDepartmentKPIs(query),
@@ -365,7 +487,7 @@ const App = {
             }
         }
 
-        if (page === 'behavior') {
+        if (dataPage === 'behavior') {
             const [dailyUsers, tags, apps, kpi] = await Promise.all([
                 API.getDailyUsers(query),
                 API.getTrendingTags(query),
@@ -376,6 +498,7 @@ const App = {
                 this.applyLiveDataAsOf('behavior', kpi.data?.dataAsOf);
                 data = {
                     dailyUsers: successful(dailyUsers),
+                    granularity: dailyUsers.granularity || this.getDateGranularity(this.state.behavior.filter.date),
                     tags: successful(tags),
                     apps: successful(apps),
                     kpi: successful(kpi),
@@ -383,7 +506,8 @@ const App = {
             }
         }
 
-        this.liveData[page] = data;
+        this.liveData[dataPage] = data;
+        if (page !== dataPage) this.liveData[page] = data;
         this.currentDataMode = data ? 'live' : 'unavailable';
         this.updateAPIStatus();
     },
@@ -401,20 +525,48 @@ const App = {
             } else if (date.mode === 'year') {
                 start = `${date.year}-01-01`;
                 end = `${date.year}-12-31`;
-            } else {
+            } else if (date.mode === 'month') {
                 const lastDay = new Date(date.year, date.month, 0).getDate();
                 start = `${date.year}-${String(date.month).padStart(2, '0')}-01`;
                 end = `${date.year}-${String(date.month).padStart(2, '0')}-${lastDay}`;
             }
-            params.set('start', start);
-            params.set('end', end);
+            if (start && end) {
+                params.set('start', start);
+                params.set('end', end);
+            }
         }
+        params.set('granularity', this.getDateGranularity(date));
         const hierarchy = filter.hierarchy;
         if (hierarchy.campuses.length) params.set('campuses', hierarchy.campuses.join(','));
         if (hierarchy.faculties.length) params.set('faculties', hierarchy.faculties.join(','));
         if (hierarchy.departments.length) params.set('departments', hierarchy.departments.join(','));
         const query = params.toString();
         return query ? `?${query}` : '';
+    },
+
+    getDateGranularity(date = {}) {
+        if (date.mode === 'all') return 'year';
+        if (date.mode === 'year') return 'month';
+        return 'day';
+    },
+
+    formatTrendPeriod(item, granularity = 'month') {
+        const value = item.date || item.periodStart || item.period_start;
+        if (value) {
+            const parsed = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+            if (!Number.isNaN(parsed.getTime())) {
+                if (granularity === 'day') {
+                    return parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+                }
+                if (granularity === 'year') {
+                    return String(parsed.getFullYear());
+                }
+                return parsed.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+            }
+        }
+        if (granularity === 'day') return item.month;
+        if (granularity === 'year') return String(item.year || item.month);
+        return `${item.month} ${item.year}`;
     },
 
     applyLiveDataAsOf(page, value) {
@@ -424,6 +576,7 @@ const App = {
         const latestDate = {
             month: dataAsOf.getMonth() + 1,
             year: dataAsOf.getFullYear(),
+            date: dataAsOf.toISOString().slice(0, 10),
         };
         this.state[page].latestDate = latestDate;
         if (this.state[page].liveDateInitialized) return;
@@ -553,11 +706,33 @@ const App = {
         };
         if (page === 'consumption') {
             this.state.consumption.drilldownApp = null;
+            this.state.consumption.latencyApp = null;
+            this.state.consumption.latencyAppLabel = '';
             this.state.consumption.selectedYears = [String(latestDate.year)];
         }
         this.openDropdown = null;
         this.resetPage(page);
         this.render(this.currentPage);
+    },
+
+    normalizeConsumptionYears(availableYears = []) {
+        const normalized = [...new Set(availableYears.map(year => String(year)))].sort();
+        const selected = this.state.consumption.selectedYears
+            .map(year => String(year))
+            .filter(year => normalized.includes(year))
+            .slice(0, 6);
+        if (!selected.length && normalized.length) {
+            selected.push(normalized[normalized.length - 1]);
+        }
+        this.state.consumption.selectedYears = selected;
+        return normalized;
+    },
+
+    resetConsumptionYears() {
+        const years = this.normalizeConsumptionYears(
+            (this.liveData.api?.monthly || []).map(item => item.year)
+        );
+        this.state.consumption.selectedYears = years.length ? [years[years.length - 1]] : [];
     },
 
     getHierarchyOptions(page) {
@@ -649,7 +824,7 @@ const App = {
     createDateFilter(page) {
         const date = this.state[page].filter.date;
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const years = [2022, 2023, 2024, 2025, 2026];
+        const years = this.ensureDateDefaults(page);
         const customValue = date.mode === 'custom' && date.range.length === 2
             ? `${date.range[0]} to ${date.range[1]}`
             : '';
@@ -660,8 +835,8 @@ const App = {
                     <select class="filter-select compact-select" data-filter-page="${page}" data-date-field="mode">
                         <option value="month" ${date.mode === 'month' ? 'selected' : ''}>Month</option>
                         <option value="year" ${date.mode === 'year' ? 'selected' : ''}>Year</option>
+                        <option value="custom" ${date.mode === 'custom' ? 'selected' : ''}>Custom</option>
                         <option value="all" ${date.mode === 'all' ? 'selected' : ''}>All time</option>
-                        ${date.mode === 'custom' ? '<option value="custom" selected>Custom</option>' : ''}
                     </select>
                 </label>
                 ${date.mode === 'month' ? `
@@ -707,7 +882,7 @@ const App = {
                 mode: 'range',
                 dateFormat: 'Y-m-d',
                 defaultDate: date.range,
-                maxDate: 'today',
+                maxDate: this.state[page].latestDate?.date || 'today',
                 onClose: selectedDates => {
                     if (selectedDates.length !== 2) return;
                     const toIso = value => {
@@ -756,6 +931,7 @@ const App = {
 
     createDashboardPage() {
         const live = this.liveData.dashboard;
+        const dashboardGranularity = live.granularity || this.getDateGranularity(this.state.dashboard.filter.date);
         const metricMeta = {
             ACTIVE_USERS: ['ACTIVE USERS', 'group'],
             TOKEN_CONSUMPTION: ['TOKEN CONSUMPTION', 'token'],
@@ -769,7 +945,7 @@ const App = {
                 const value = metric.unit === 'Coin'
                     ? `${numeric.toLocaleString(undefined, { maximumFractionDigits: 1 })} Coin`
                     : metric.unit === 'tokens'
-                        ? this.formatCompact(numeric)
+                        ? this.formatTokenUnits(numeric)
                         : numeric.toLocaleString();
                 const change = this.formatComparison(metric.changePercent);
                 return {
@@ -781,7 +957,7 @@ const App = {
                 };
             }),
             monthly: live.monthly.map(item => ({
-                month: `${item.month} ${item.year}`,
+                month: this.formatTrendPeriod(item, dashboardGranularity),
                 usage: Number(item.usage || 0),
             })),
             topics: live.topics,
@@ -801,8 +977,10 @@ const App = {
             <div class="bento-grid">
                 <div class="col-span-8 glass-panel rounded-lg p-lg">
                     <div class="flex justify-between items-center mb-lg">
-                        <h3 class="font-title-lg text-title-lg text-on-surface">Monthly Transaction Trends</h3>
-                        <span class="material-symbols-outlined text-on-surface-variant">more_horiz</span>
+                        <h3 class="font-title-lg text-title-lg text-on-surface">Transaction Trends</h3>
+                        <span class="tag-pill px-sm py-xs text-label-md">${
+                            dashboardGranularity === 'day' ? 'Daily' : dashboardGranularity === 'year' ? 'Yearly' : 'Monthly'
+                        }</span>
                     </div>
                     <div class="chart-container-lg border border-outline-variant rounded p-md">
                         <canvas id="monthlyChart"></canvas>
@@ -1182,6 +1360,15 @@ const App = {
         if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
         if (value >= 1000) return `${Math.round(value / 1000)}k`;
         return value.toLocaleString();
+    },
+
+    formatTokenUnits(value) {
+        const numeric = Number(value || 0);
+        const absolute = Math.abs(numeric);
+        if (absolute >= 1000000000000) return `${(numeric / 1000000000000).toFixed(2)}T`;
+        if (absolute >= 1000000000) return `${(numeric / 1000000000).toFixed(2)}B`;
+        if (absolute >= 1000000) return `${(numeric / 1000000).toFixed(2)}M`;
+        return numeric.toLocaleString();
     },
 
     initCharts(page) {
