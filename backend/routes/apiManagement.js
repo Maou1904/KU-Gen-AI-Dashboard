@@ -248,6 +248,19 @@ router.get('/model-latency', async (req, res, next) => {
         const appKey = /^\d+$/.test(String(req.query.appKey || ''))
             ? Number(req.query.appKey)
             : null;
+        const groupByModel = req.query.groupBy === 'model';
+        const groupSelect = groupByModel
+            ? `model_family AS id,
+                model_family AS label,
+                'Model family' AS "groupLabel"`
+            : `CASE WHEN $6::bigint IS NULL THEN app_key::text ELSE COALESCE(model_key::text, 'unknown') END AS id,
+                CASE WHEN $6::bigint IS NULL THEN app_name ELSE COALESCE(model_name, 'Unknown model') END AS label,
+                CASE WHEN $6::bigint IS NULL THEN app_name ELSE provider END AS "groupLabel"`;
+        const groupBy = groupByModel
+            ? 'model_family'
+            : `CASE WHEN $6::bigint IS NULL THEN app_key::text ELSE COALESCE(model_key::text, 'unknown') END,
+                CASE WHEN $6::bigint IS NULL THEN app_name ELSE COALESCE(model_name, 'Unknown model') END,
+                CASE WHEN $6::bigint IS NULL THEN app_name ELSE provider END`;
         const filter = usageFilter(req, 's');
         const { rows } = await dashboardPool.query(
             `WITH model_scope AS (
@@ -255,7 +268,8 @@ router.get('/model-latency', async (req, res, next) => {
                     s.*,
                     a.app_name,
                     m.model_name,
-                    m.provider
+                    m.provider,
+                    ${modelFamilySql('m')} AS model_family
                 FROM ${modelUsageSource} s
                 JOIN dim_app a ON a.app_key = s.app_key
                 LEFT JOIN dim_model m ON m.model_key = s.model_key
@@ -264,17 +278,12 @@ router.get('/model-latency', async (req, res, next) => {
                   AND ${filter.sql}
              )
              SELECT
-                CASE WHEN $6::bigint IS NULL THEN app_key::text ELSE COALESCE(model_key::text, 'unknown') END AS id,
-                CASE WHEN $6::bigint IS NULL THEN app_name ELSE COALESCE(model_name, 'Unknown model') END AS label,
-                CASE WHEN $6::bigint IS NULL THEN app_name ELSE provider END AS "groupLabel",
+                ${groupSelect},
                 ROUND(AVG(latency_seconds)::numeric, 2) AS "avgLatency",
                 ROUND((PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_seconds))::numeric, 2) AS "p95Latency",
                 COUNT(*)::bigint AS events
              FROM model_scope
-             GROUP BY
-                CASE WHEN $6::bigint IS NULL THEN app_key::text ELSE COALESCE(model_key::text, 'unknown') END,
-                CASE WHEN $6::bigint IS NULL THEN app_name ELSE COALESCE(model_name, 'Unknown model') END,
-                CASE WHEN $6::bigint IS NULL THEN app_name ELSE provider END
+             GROUP BY ${groupBy}
              ORDER BY "avgLatency" DESC
              LIMIT 8`,
             [...filter.params, appKey]
@@ -283,7 +292,7 @@ router.get('/model-latency', async (req, res, next) => {
         res.json({
             success: true,
             data: rows,
-            mode: appKey ? 'models' : 'apps',
+            mode: groupByModel || appKey ? 'models' : 'apps',
             source: 'dashboard_test',
         });
     } catch (error) {

@@ -58,23 +58,20 @@ Object.assign(App, {
         return { totalTransactions, totalTokens, averageTransactions, peak };
     },
 
-    getDashboardOverviewSeries(rows) {
-        const toIndex = values => {
-            const base = values.find(value => Number(value) > 0) || 1;
-            return values.map(value => Number(((Number(value || 0) / base) * 100).toFixed(2)));
+    getDashboardOverviewSeries(rows, metricKeys = ['activeUsers', 'tokens', 'coins', 'transactions']) {
+        const metrics = {
+            activeUsers: ['Active Users', rows.map(item => item.activeUsers), 'users'],
+            tokens: ['Token Consumption', rows.map(item => item.tokens), 'tokens'],
+            coins: ['Coin Consumption', rows.map(item => item.coins), 'Coin'],
+            transactions: ['Transactions', rows.map(item => item.transactions), 'transactions'],
         };
-        const metrics = [
-            ['Active Users', rows.map(item => item.activeUsers), 'users'],
-            ['Token Consumption', rows.map(item => item.tokens), 'tokens'],
-            ['Coin Consumption', rows.map(item => item.coins), 'Coin'],
-            ['Transactions', rows.map(item => item.transactions), 'transactions'],
-        ];
 
-        return metrics.map(([label, values, valueLabel]) => ({
+        return metricKeys.map(key => metrics[key]).filter(Boolean).map(([label, values, valueLabel]) => ({
             label,
-            data: toIndex(values),
+            data: values.map(value => Number(value || 0)),
             rawData: values,
             valueLabel,
+            indexed: false,
         }));
     },
 
@@ -162,7 +159,6 @@ Object.assign(App, {
         const granularity = rows[0]?.granularity || this.getDateGranularity(this.state.dashboard.filter.date);
         const stats = this.getDashboardTrendStats(rows);
         const periodLabel = this.getPeriodScopeLabel(granularity);
-        const overviewSeries = this.getDashboardOverviewSeries(rows);
         const latest = rows[rows.length - 1] || {};
 
         return `
@@ -176,48 +172,35 @@ Object.assign(App, {
                 ${kpis.map(k => this.createKPICard(k.label, k.value, k.change, k.icon, k.type)).join('')}
             </div>
 
-            <div class="bento-grid mb-gutter">
-                <section class="col-span-8 glass-panel rounded-lg p-lg">
-                    <div class="flex justify-between items-start gap-md mb-md">
-                        <div>
-                            <h3 class="font-title-lg text-title-lg text-on-surface">Overview Trend</h3>
-                            <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Indexed area chart for active users, token consumption, Coin consumption, and transactions.</p>
+            <section class="glass-panel rounded-lg p-lg mb-gutter">
+                <div class="flex justify-between items-start gap-md mb-md">
+                    <div>
+                        <h3 class="font-title-lg text-title-lg text-on-surface">Overview Trend</h3>
+                        <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Raw values by period, split so each metric keeps its real unit.</p>
+                    </div>
+                    <span class="tag-pill px-sm py-xs text-label-md">${periodLabel}</span>
+                </div>
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-gutter">
+                    <div>
+                        <div class="flex items-center justify-between mb-sm">
+                            <h4 class="font-title-md text-title-md text-on-surface">Active Users & Transactions</h4>
+                            <span class="font-label-md text-label-md text-on-surface-variant">${stats.totalTransactions.toLocaleString()} tx total</span>
                         </div>
-                        <span class="tag-pill px-sm py-xs text-label-md">${periodLabel}</span>
+                        <div class="chart-container-lg">
+                            <canvas id="dashboardEngagementTrendChart"></canvas>
+                        </div>
                     </div>
-                    <div class="chart-container-lg">
-                        <canvas id="dashboardOverviewAreaChart"></canvas>
+                    <div>
+                        <div class="flex items-center justify-between mb-sm">
+                            <h4 class="font-title-md text-title-md text-on-surface">Tokens & Coins</h4>
+                            <span class="font-label-md text-label-md text-on-surface-variant">${this.formatTokenUnits(stats.totalTokens)} total</span>
+                        </div>
+                        <div class="chart-container-lg">
+                            <canvas id="dashboardConsumptionTrendChart"></canvas>
+                        </div>
                     </div>
-                </section>
-                <section class="col-span-4 glass-panel rounded-lg p-lg">
-                    <h3 class="font-title-lg text-title-lg text-on-surface mb-md">Latest Snapshot</h3>
-                    <div class="grid gap-sm">
-                        ${overviewSeries.map(item => {
-                            const raw = item.rawData[item.rawData.length - 1] || 0;
-                            const formatted = item.valueLabel === 'tokens'
-                                ? this.formatTokenUnits(raw)
-                                : item.valueLabel === 'Coin'
-                                    ? `${Number(raw).toLocaleString(undefined, { maximumFractionDigits: 0 })} Coin`
-                                    : Number(raw).toLocaleString();
-                            return `
-                                <div class="flex justify-between items-center gap-sm rounded border border-outline-variant p-sm">
-                                    <span class="font-label-md text-label-md text-on-surface-variant">${item.label}</span>
-                                    <span class="font-label-md text-label-md text-on-surface text-right">${formatted}</span>
-                                </div>
-                            `;
-                        }).join('')}
-                    </div>
-                    <div class="pt-md mt-md border-t border-outline-variant">
-                        <p class="font-label-md text-label-md text-on-surface-variant">Total transactions</p>
-                        <div class="font-headline-lg text-headline-lg text-primary mt-xs">${stats.totalTransactions.toLocaleString()}</div>
-                    </div>
-                    <div class="pt-md border-t border-outline-variant">
-                        <p class="font-label-md text-label-md text-on-surface-variant">Peak period</p>
-                        <div class="font-title-lg text-title-lg text-on-surface mt-xs">${stats.peak?.label || '-'}</div>
-                        <p class="font-body-md text-body-md text-on-surface-variant mt-xs">${(stats.peak?.transactions || 0).toLocaleString()} transactions</p>
-                    </div>
-                </section>
-            </div>
+                </div>
+            </section>
 
             <section class="glass-panel rounded-lg p-lg">
                 <div class="flex justify-between items-center mb-md">
@@ -336,9 +319,7 @@ Object.assign(App, {
             p95Latency: Number(row.p95Latency || 0),
             events: Number(row.events || 0),
         }));
-        const latencyTitle = state.latencyApp
-            ? `${state.latencyAppLabel || 'Selected app'} Model Latency`
-            : 'App Latency';
+        const latencyTitle = 'Model Latency';
 
         return `
             ${this.createPageHeader(
@@ -410,7 +391,7 @@ Object.assign(App, {
                     </div>
                     ${this.createCompareYearsControl()}
                 </div>
-                <div class="grid grid-cols-2 gap-gutter">
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-gutter">
                     <div>
                         <div class="flex items-center justify-between mb-sm">
                             <h4 class="font-title-md text-title-md text-on-surface">Monthly Tokens Used</h4>
@@ -435,33 +416,22 @@ Object.assign(App, {
             <section class="glass-panel rounded-lg p-lg mb-gutter">
                 <div class="flex justify-between items-start gap-md mb-md">
                     <div>
-                        ${state.latencyApp ? `
-                            <button type="button" class="inline-flex items-center gap-xs text-primary font-label-md mb-sm" data-latency-back>
-                                <span class="material-symbols-outlined text-[18px]">arrow_back</span> Back to apps
-                            </button>
-                        ` : ''}
                         <h3 class="font-title-lg text-title-lg text-on-surface">${latencyTitle}</h3>
-                        <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Average model response latency from model usage events.</p>
+                        <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Average response latency grouped by model.</p>
                     </div>
-                    <span class="tag-pill px-sm py-xs text-label-md">${state.latencyApp ? 'Models' : 'Apps'}</span>
+                    <span class="tag-pill px-sm py-xs text-label-md">Models</span>
                 </div>
-                <div class="grid grid-cols-[minmax(0,1fr)_260px] gap-lg items-center consumption-chart-layout">
-                    <div class="chart-container-lg">
-                        <canvas id="consumptionLatencyChart"></canvas>
-                    </div>
-                    <div class="space-y-xs">
-                        ${latencyRows.map(row => `
-                            <button type="button" class="legend-button" ${state.latencyApp ? '' : `data-latency-app="${row.id}" data-latency-label="${row.label}"`}>
-                                <span>
-                                    <span class="block font-label-md text-label-md text-on-surface">${row.label}</span>
-                                    <span class="block font-body-md text-body-md text-on-surface-variant">
-                                        Avg ${row.avgLatency.toFixed(2)}s · P95 ${row.p95Latency.toFixed(2)}s · ${row.events.toLocaleString()} events
-                                    </span>
-                                </span>
-                                ${state.latencyApp ? '' : '<span class="material-symbols-outlined text-[18px] text-on-surface-variant">chevron_right</span>'}
-                            </button>
-                        `).join('') || '<p class="font-body-md text-body-md text-on-surface-variant">No latency data matches the selected filters.</p>'}
-                    </div>
+                <div class="chart-container-lg">
+                    <canvas id="consumptionLatencyChart"></canvas>
+                </div>
+                <div class="mt-md grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-sm">
+                    ${latencyRows.map(row => `
+                        <div class="rounded border border-outline-variant p-sm">
+                            <div class="font-label-md text-label-md text-on-surface truncate">${row.label}</div>
+                            <div class="font-body-md text-body-md text-on-surface-variant mt-xs">Avg ${row.avgLatency.toFixed(2)}s / P95 ${row.p95Latency.toFixed(2)}s</div>
+                            <div class="font-body-md text-body-md text-on-surface-variant">${row.events.toLocaleString()} events</div>
+                        </div>
+                    `).join('') || '<p class="font-body-md text-body-md text-on-surface-variant">No latency data matches the selected filters.</p>'}
                 </div>
             </section>
 
@@ -557,8 +527,12 @@ Object.assign(App, {
             users: Number(item.users || 0),
         }));
         const appDist = live.apps
-            .map(app => ({ ...app, percentage: Number(app.percentage || 0) }))
-            .sort((a, b) => b.percentage - a.percentage);
+            .map(app => ({
+                ...app,
+                percentage: Number(app.percentage || 0),
+                usageCount: Number(app.usageCount || 0),
+            }))
+            .sort((a, b) => b.usageCount - a.usageCount);
         const averageUsers = Math.round(
             activeUsers.reduce((sum, item) => sum + item.users, 0) / Math.max(1, activeUsers.length)
         );
@@ -568,7 +542,7 @@ Object.assign(App, {
         return `
             ${this.createPageHeader(
                 'User Behavior V2',
-                'Active usage patterns with app distribution as a horizontal bar chart.',
+                'Active usage patterns with app distribution and transaction volume.',
                 this.createFilterToolbar('behavior')
             )}
 
@@ -599,7 +573,7 @@ Object.assign(App, {
                     <div class="flex justify-between items-start gap-md mb-md">
                         <div>
                             <h3 class="font-title-lg text-title-lg text-on-surface flex items-center gap-sm">
-                                <span class="material-symbols-outlined text-primary">apps</span> App Usage
+                                <span class="material-symbols-outlined text-primary">apps</span> Top Active Apps
                             </h3>
                             <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Transaction share by app.</p>
                         </div>
@@ -627,9 +601,9 @@ Object.assign(App, {
                     <div class="flex justify-between items-start gap-md mb-md">
                         <div>
                             <h3 class="font-title-lg text-title-lg text-on-surface flex items-center gap-sm">
-                                <span class="material-symbols-outlined text-primary">bar_chart</span> Top Active Apps
+                                <span class="material-symbols-outlined text-primary">bar_chart</span> App Usage
                             </h3>
-                            <p class="font-label-md text-label-md text-on-surface-variant mt-xs">${this.getFilterLabel('behavior')}</p>
+                            <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Transactions by app.</p>
                         </div>
                         <span class="tag-pill px-sm py-xs text-label-md">${appDist.length} apps</span>
                     </div>
@@ -1337,14 +1311,19 @@ Object.assign(App, {
     initCharts(page) {
         if (page === 'dashboardv2') {
             const rows = this.getDashboardTrendRows();
-            Charts.createOverviewAreaChart(
-                'dashboardOverviewAreaChart',
-                rows.map(item => item.label),
-                this.getDashboardOverviewSeries(rows)
+            const labels = rows.map(item => item.label);
+            Charts.createDualMetricLineChart(
+                'dashboardEngagementTrendChart',
+                labels,
+                this.getDashboardOverviewSeries(rows, ['activeUsers', 'transactions'])
+            );
+            Charts.createDualMetricLineChart(
+                'dashboardConsumptionTrendChart',
+                labels,
+                this.getDashboardOverviewSeries(rows, ['tokens', 'coins'])
             );
             return;
         }
-
         if (page === 'dashboardv3') {
             const rows = this.getDashboardTrendRows();
             Charts.createDualAxisComboChart(
@@ -1409,9 +1388,9 @@ Object.assign(App, {
                 }
             );
             const tokenData = this.getConsumptionMonthlyTokenData(false);
-            Charts.createMultiLineChart('consumptionLineChart', tokenData.labels, tokenData.series);
+            Charts.createMultiBarChart('consumptionLineChart', tokenData.labels, tokenData.series, { valueLabel: 'Tokens' });
             const coinData = this.getConsumptionMonthlyCoinData(false);
-            Charts.createMultiLineChart('consumptionCoinChart', coinData.labels, coinData.series, { valueLabel: 'Coin' });
+            Charts.createMultiBarChart('consumptionCoinChart', coinData.labels, coinData.series, { valueLabel: 'Coin' });
             const latencyData = (live.latency || []).map(item => ({
                 label: item.label,
                 avgLatency: Number(item.avgLatency || 0),
@@ -1484,8 +1463,12 @@ Object.assign(App, {
                 'Active Users'
             );
             const appData = live.apps
-                .map(app => ({ ...app, percentage: Number(app.percentage || 0) }))
-                .sort((a, b) => b.percentage - a.percentage);
+                .map(app => ({
+                    ...app,
+                    percentage: Number(app.percentage || 0),
+                    usageCount: Number(app.usageCount || 0),
+                }))
+                .sort((a, b) => b.usageCount - a.usageCount);
             const totalTransactions = appData.reduce((sum, item) => sum + Number(item.usageCount || 0), 0);
             Charts.createDoughnutChart(
                 'behaviorV2AppDonut',
@@ -1503,9 +1486,8 @@ Object.assign(App, {
             Charts.createHorizontalBarChart(
                 'behaviorAppsBarChart',
                 appData.map(item => item.app),
-                appData.map(item => item.percentage),
-                'Usage Share',
-                { valueSuffix: '%' }
+                appData.map(item => item.usageCount),
+                'Transactions'
             );
             return;
         }

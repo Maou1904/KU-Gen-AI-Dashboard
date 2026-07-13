@@ -20,8 +20,6 @@ const App = {
             },
             selectedYears: [],
             drilldownApp: null,
-            latencyApp: null,
-            latencyAppLabel: '',
             hierarchyPage: 1,
             hierarchyPageSize: 7,
         },
@@ -242,21 +240,6 @@ const App = {
             return;
         }
 
-        const latencyDrilldown = event.target.closest('[data-latency-app]');
-        if (latencyDrilldown) {
-            this.state.consumption.latencyApp = latencyDrilldown.dataset.latencyApp;
-            this.state.consumption.latencyAppLabel = latencyDrilldown.dataset.latencyLabel || '';
-            this.render(this.currentPage);
-            return;
-        }
-
-        if (event.target.closest('[data-latency-back]')) {
-            this.state.consumption.latencyApp = null;
-            this.state.consumption.latencyAppLabel = '';
-            this.render(this.currentPage);
-            return;
-        }
-
         if (event.target.closest('#export-analytics')) {
             this.exportAnalytics();
             return;
@@ -445,8 +428,7 @@ const App = {
 
         if (dataPage === 'api') {
             const family = this.state.consumption.drilldownApp;
-            const latencyApp = this.state.consumption.latencyApp;
-            const latencyQuery = `${query}${query ? '&' : '?'}${latencyApp ? `appKey=${encodeURIComponent(latencyApp)}` : ''}`.replace(/[?&]$/, '');
+            const latencyQuery = `${query}${query ? '&' : '?'}groupBy=model`;
             const [providers, models, hierarchy, costs, monthly, latency] = await Promise.all([
                 API.getProviderConsumption(query),
                 API.getModelConsumption(`${query}${query ? '&' : '?'}${family ? `family=${encodeURIComponent(family)}` : ''}`.replace(/[?&]$/, '')),
@@ -465,7 +447,7 @@ const App = {
                     costs: successful(costs),
                     monthly: successful(monthly),
                     latency: successful(latency) || [],
-                    latencyMode: latency?.mode || (latencyApp ? 'models' : 'apps'),
+                    latencyMode: latency?.mode || 'models',
                 };
             }
         }
@@ -706,8 +688,6 @@ const App = {
         };
         if (page === 'consumption') {
             this.state.consumption.drilldownApp = null;
-            this.state.consumption.latencyApp = null;
-            this.state.consumption.latencyAppLabel = '';
             this.state.consumption.selectedYears = [String(latestDate.year)];
         }
         this.openDropdown = null;
@@ -917,7 +897,7 @@ const App = {
         if (totalPages <= 1) return '';
         const pages = Array.from({ length: totalPages }, (_, index) => index + 1);
         return `
-            <div class="flex justify-center items-center gap-sm mt-md text-body-lg">
+            <div class="flex justify-center items-center flex-wrap gap-sm mt-md text-body-lg max-w-full">
                 <button type="button" class="pagination-btn" data-pagination-target="${target}" data-page-number="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''} title="Previous page">
                     <span class="material-symbols-outlined text-[18px]">chevron_left</span>
                 </button>

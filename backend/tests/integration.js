@@ -201,6 +201,11 @@ const run = async () => {
         throw new Error('Top Active Apps must be Top 5 plus Other and total 100%');
     }
 
+    const modelLatency = await request(baseUrl, '/api/api-management/model-latency?groupBy=model');
+    if (modelLatency.mode !== 'models' || modelLatency.data.some(item => item.avgLatency == null)) {
+        throw new Error('Model latency must support direct model grouping for Consumption V2');
+    }
+
     const hierarchy = await request(baseUrl, '/api/api-management/hierarchy');
     if (hierarchy.data.some(item =>
         item.campus === 'Unknown'

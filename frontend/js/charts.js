@@ -248,6 +248,7 @@ const Charts = {
                     data: item.data,
                     rawData: item.rawData || item.data,
                     valueLabel: item.valueLabel || '',
+                    indexed: item.indexed !== false,
                     borderColor: palette[index],
                     backgroundColor: this.withAlpha(palette[index], 0.14),
                     borderWidth: 3,
@@ -277,7 +278,10 @@ const Charts = {
                             label: context => {
                                 const raw = context.dataset.rawData?.[context.dataIndex] ?? context.parsed.y;
                                 const suffix = context.dataset.valueLabel ? ` ${context.dataset.valueLabel}` : '';
-                                return `${context.dataset.label}: ${this.formatCompactNumber(raw)}${suffix} (${Number(context.parsed.y || 0).toFixed(1)} index)`;
+                                const value = `${context.dataset.label}: ${this.formatCompactNumber(raw)}${suffix}`;
+                                return context.dataset.indexed
+                                    ? `${value} (${Number(context.parsed.y || 0).toFixed(1)} index)`
+                                    : value;
                             },
                         },
                     },
@@ -287,6 +291,85 @@ const Charts = {
                         beginAtZero: true,
                         grid: { color: '#efeded' },
                         ticks: { color: '#707a6c', callback: value => `${value}` },
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#707a6c' },
+                    },
+                },
+            },
+        });
+    },
+
+    createDualMetricLineChart(canvasId, labels, series) {
+        const ctx = document.getElementById(canvasId);
+        if (!ctx) return;
+        this.destroy(canvasId);
+
+        const visibleSeries = series.slice(0, 2);
+        const palette = this.getThemePalette(visibleSeries.length);
+        const withUnit = (value, unit) => {
+            const formatted = this.formatCompactNumber(value);
+            return unit ? `${formatted} ${unit}` : formatted;
+        };
+
+        this.chartInstances[canvasId] = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: visibleSeries.map((item, index) => ({
+                    label: item.label,
+                    data: item.data,
+                    rawData: item.rawData || item.data,
+                    valueLabel: item.valueLabel || '',
+                    yAxisID: index === 0 ? 'y' : 'y1',
+                    borderColor: palette[index],
+                    backgroundColor: this.withAlpha(palette[index], index === 0 ? 0.12 : 0.05),
+                    borderWidth: 3,
+                    pointRadius: 3,
+                    pointHoverRadius: 6,
+                    tension: 0.3,
+                    fill: index === 0,
+                })),
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                layout: { padding: { top: 24 } },
+                plugins: {
+                    valueLabels: false,
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        align: 'end',
+                        labels: { color: '#1b1c1c', font: { size: 12, weight: '700' }, usePointStyle: true },
+                    },
+                    tooltip: {
+                        backgroundColor: '#1b1c1c',
+                        padding: 12,
+                        callbacks: {
+                            label: context => {
+                                const raw = context.dataset.rawData?.[context.dataIndex] ?? context.parsed.y;
+                                return `${context.dataset.label}: ${withUnit(raw, context.dataset.valueLabel)}`;
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    y: {
+                        type: 'linear',
+                        position: 'left',
+                        beginAtZero: true,
+                        grid: { color: '#efeded' },
+                        ticks: { color: '#707a6c', callback: value => this.formatCompactNumber(value) },
+                    },
+                    y1: {
+                        type: 'linear',
+                        position: 'right',
+                        beginAtZero: true,
+                        grid: { drawOnChartArea: false },
+                        ticks: { color: '#707a6c', callback: value => this.formatCompactNumber(value) },
                     },
                     x: {
                         grid: { display: false },
@@ -631,12 +714,17 @@ const Charts = {
         ]);
     },
 
-    createMultiBarChart(canvasId, labels, series) {
+    createMultiBarChart(canvasId, labels, series, options = {}) {
         const ctx = document.getElementById(canvasId);
         if (!ctx) return;
         this.destroy(canvasId);
 
         const palette = this.getThemePalette(series.length);
+        const valueLabel = options.valueLabel || '';
+        const withUnit = value => {
+            const formatted = this.formatCompactNumber(value);
+            return valueLabel ? `${formatted} ${valueLabel}` : formatted;
+        };
         this.chartInstances[canvasId] = new Chart(ctx, {
             type: 'bar',
             data: {
@@ -654,7 +742,9 @@ const Charts = {
                 maintainAspectRatio: false,
                 layout: { padding: { top: 28 } },
                 plugins: {
-                    valueLabels: true,
+                    valueLabels: {
+                        formatter: value => withUnit(value),
+                    },
                     legend: {
                         display: true,
                         position: 'top',
@@ -666,13 +756,19 @@ const Charts = {
                             usePointStyle: true
                         }
                     },
-                    tooltip: { backgroundColor: '#1b1c1c', padding: 12 }
+                    tooltip: {
+                        backgroundColor: '#1b1c1c',
+                        padding: 12,
+                        callbacks: {
+                            label: context => `${context.dataset.label}: ${withUnit(context.parsed.y)}`,
+                        },
+                    }
                 },
                 scales: {
                     y: {
                         beginAtZero: true,
                         grid: { color: '#efeded' },
-                        ticks: { color: '#707a6c' }
+                        ticks: { color: '#707a6c', callback: value => this.formatCompactNumber(value) }
                     },
                     x: {
                         grid: { display: false },
