@@ -2,14 +2,18 @@
 const Charts = {
     chartInstances: {},
     palettes: {
-        forest: ['#0d631b', '#0054a7', '#7faa85', '#94a89a', '#dce6dc'],
-        ocean: ['#0054a7', '#00838f', '#5b8fc9', '#79a8a9', '#dbe9ef'],
-        graphite: ['#343a40', '#606970', '#7f8991', '#a3abb1', '#e0e3e5'],
+        green: ['#0d631b', '#2f7d3d', '#69a56f', '#b7d3bb'],
+        blue: ['#0054a7', '#2f78bd', '#6ca5d8', '#bfd8ec'],
+        black: ['#1b1c1c', '#4f5555', '#8f9494', '#cfd3d3'],
+        red: ['#c62828', '#d94c4c', '#e78383', '#f1c1c1'],
+        forest: ['#0d631b', '#2f7d3d', '#69a56f', '#b7d3bb'],
+        ocean: ['#0054a7', '#2f78bd', '#6ca5d8', '#bfd8ec'],
+        graphite: ['#1b1c1c', '#4f5555', '#8f9494', '#cfd3d3'],
     },
 
     getThemePalette(count = 5) {
-        const theme = document.body.dataset.theme || 'forest';
-        const palette = this.palettes[theme] || this.palettes.forest;
+        const theme = document.body.dataset.theme || 'green';
+        const palette = this.palettes[theme] || this.palettes.green;
         return Array.from({ length: count }, (_, index) => palette[index % palette.length]);
     },
 
@@ -71,7 +75,16 @@ const Charts = {
                     if (raw === null || raw === undefined) return;
                     const position = element.tooltipPosition();
                     const isLine = dataset.type === 'line' || chart.config.type === 'line';
-                    ctx.fillText(formatter(Number(raw)), position.x, position.y - (isLine ? 12 : 4));
+                    const isHorizontalBar = chart.config.type === 'bar' && chart.options?.indexAxis === 'y';
+                    if (isHorizontalBar) {
+                        ctx.textAlign = options?.textAlign || 'left';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(formatter(Number(raw)), position.x + Number(options?.offsetX ?? 16), position.y);
+                    } else {
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'bottom';
+                        ctx.fillText(formatter(Number(raw)), position.x, position.y - (isLine ? 12 : 4));
+                    }
                 });
             });
             ctx.restore();
@@ -141,7 +154,7 @@ const Charts = {
 
         const palette = this.getThemePalette();
         const colors = labels.map((_, index) => (
-            index === highlightIndex ? palette[0] : index === 2 ? palette[3] : palette[4]
+            index === highlightIndex ? palette[0] : index === 2 ? palette[2] : palette[1]
         ));
 
         this.chartInstances[canvasId] = new Chart(ctx, {
@@ -301,7 +314,7 @@ const Charts = {
         });
     },
 
-    createDualMetricLineChart(canvasId, labels, series) {
+    createDualMetricBarChart(canvasId, labels, series) {
         const ctx = document.getElementById(canvasId);
         if (!ctx) return;
         this.destroy(canvasId);
@@ -314,7 +327,7 @@ const Charts = {
         };
 
         this.chartInstances[canvasId] = new Chart(ctx, {
-            type: 'line',
+            type: 'bar',
             data: {
                 labels,
                 datasets: visibleSeries.map((item, index) => ({
@@ -323,13 +336,9 @@ const Charts = {
                     rawData: item.rawData || item.data,
                     valueLabel: item.valueLabel || '',
                     yAxisID: index === 0 ? 'y' : 'y1',
-                    borderColor: palette[index],
-                    backgroundColor: this.withAlpha(palette[index], index === 0 ? 0.12 : 0.05),
-                    borderWidth: 3,
-                    pointRadius: 3,
-                    pointHoverRadius: 6,
-                    tension: 0.3,
-                    fill: index === 0,
+                    backgroundColor: this.withAlpha(palette[index], 0.78),
+                    borderRadius: 4,
+                    borderSkipped: false,
                 })),
             },
             options: {
@@ -668,7 +677,7 @@ const Charts = {
                 indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
-                layout: { padding: { right: 24 } },
+                layout: { padding: { right: Number(options.layoutRight || 32) } },
                 plugins: {
                     valueLabels: {
                         formatter: value => options.valueSuffix === '%'
@@ -676,6 +685,7 @@ const Charts = {
                             : options.valueSuffix === 's'
                                 ? `${Number(value || 0).toFixed(2)}s`
                             : this.formatCompactNumber(value),
+                        offsetX: Number(options.valueLabelOffsetX ?? 16),
                     },
                     legend: { display: false },
                     tooltip: {

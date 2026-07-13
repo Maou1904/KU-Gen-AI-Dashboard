@@ -80,29 +80,50 @@
         :root {
             --theme-primary: #0d631b;
             --theme-primary-soft: #d9e6da;
-            --theme-primary-faint: #e2f8e2;
-            --theme-primary-border: #d5ecd5;
+            --theme-primary-faint: #eef7ee;
+            --theme-primary-border: #c9dfcc;
             --heatmap-low: #dde8dd;
             --heatmap-mid: #7daa84;
             --heatmap-high: #0d631b;
         }
+        body[data-theme="green"],
+        body[data-theme="forest"] {
+            --theme-primary: #0d631b;
+            --theme-primary-soft: #d9e6da;
+            --theme-primary-faint: #eef7ee;
+            --theme-primary-border: #c9dfcc;
+            --heatmap-low: #dde8dd;
+            --heatmap-mid: #7daa84;
+            --heatmap-high: #0d631b;
+        }
+        body[data-theme="blue"],
         body[data-theme="ocean"] {
             --theme-primary: #0054a7;
             --theme-primary-soft: #d9e8f8;
-            --theme-primary-faint: #e5f1fb;
-            --theme-primary-border: #c5dced;
+            --theme-primary-faint: #edf5fc;
+            --theme-primary-border: #bdd6eb;
             --heatmap-low: #e1edf6;
             --heatmap-mid: #79a8cf;
             --heatmap-high: #0054a7;
         }
+        body[data-theme="black"],
         body[data-theme="graphite"] {
-            --theme-primary: #343a40;
-            --theme-primary-soft: #e2e4e6;
-            --theme-primary-faint: #eef0f1;
-            --theme-primary-border: #d4d7da;
-            --heatmap-low: #e5e7e9;
-            --heatmap-mid: #9099a1;
-            --heatmap-high: #343a40;
+            --theme-primary: #1b1c1c;
+            --theme-primary-soft: #e6e7e7;
+            --theme-primary-faint: #f0f1f1;
+            --theme-primary-border: #cfd3d3;
+            --heatmap-low: #e6e7e7;
+            --heatmap-mid: #8f9494;
+            --heatmap-high: #1b1c1c;
+        }
+        body[data-theme="red"] {
+            --theme-primary: #c62828;
+            --theme-primary-soft: #f5dddd;
+            --theme-primary-faint: #fff1f1;
+            --theme-primary-border: #e8b8b8;
+            --heatmap-low: #f5dddd;
+            --heatmap-mid: #e06b6b;
+            --heatmap-high: #c62828;
         }
         body { background-color: #fbf9f9; color: #1b1c1c; }
         .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
@@ -452,14 +473,10 @@
             padding-top: 8px;
             padding-bottom: 8px;
         }
-        body[data-theme="ocean"] .text-primary { color: #0054a7 !important; }
-        body[data-theme="ocean"] .bg-primary { background-color: #0054a7 !important; }
-        body[data-theme="ocean"] .bg-secondary-container { background-color: #d9e8f8 !important; }
-        body[data-theme="ocean"] .nav-link.active { background: #d9e8f8; color: #0054a7; }
-        body[data-theme="graphite"] .text-primary { color: #343a40 !important; }
-        body[data-theme="graphite"] .bg-primary { background-color: #343a40 !important; }
-        body[data-theme="graphite"] .bg-secondary-container { background-color: #e2e4e6 !important; }
-        body[data-theme="graphite"] .nav-link.active { background: #e2e4e6; color: #343a40; }
+        .text-primary { color: var(--theme-primary) !important; }
+        .bg-primary { background-color: var(--theme-primary) !important; }
+        .bg-secondary-container { background-color: var(--theme-primary-soft) !important; }
+        .nav-link.active { background: var(--theme-primary-soft); color: var(--theme-primary); }
         .theme-accent-panel {
             background: var(--theme-primary-faint);
             border-color: var(--theme-primary-border);
@@ -700,9 +717,6 @@
             <li><a href="#/dashboardv2" class="nav-link flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-high transition-colors rounded cursor-pointer font-label-md text-label-md">
                 <span class="material-symbols-outlined">monitoring</span> Dashboard V2
             </a></li>
-            <li><a href="#/dashboardv3" class="nav-link flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-high transition-colors rounded cursor-pointer font-label-md text-label-md">
-                <span class="material-symbols-outlined">query_stats</span> Dashboard V3
-            </a></li>
             <li><a href="#/department" class="nav-link flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-high transition-colors rounded cursor-pointer font-label-md text-label-md">
                 <span class="material-symbols-outlined">leaderboard</span> Analytics
             </a></li>
@@ -711,9 +725,6 @@
             </a></li>
             <li><a href="#/consumptionv2" class="nav-link flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-high transition-colors rounded cursor-pointer font-label-md text-label-md">
                 <span class="material-symbols-outlined">show_chart</span> Consumption V2
-            </a></li>
-            <li><a href="#/consumptionv3" class="nav-link flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-high transition-colors rounded cursor-pointer font-label-md text-label-md">
-                <span class="material-symbols-outlined">stacked_line_chart</span> Consumption V3
             </a></li>
             <li><a href="#/behavior" class="nav-link flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-high transition-colors rounded cursor-pointer font-label-md text-label-md">
                 <span class="material-symbols-outlined">person_search</span> User Behavior

@@ -205,6 +205,19 @@ const run = async () => {
     if (modelLatency.mode !== 'models' || modelLatency.data.some(item => item.avgLatency == null)) {
         throw new Error('Model latency must support direct model grouping for Consumption V2');
     }
+    const latencyFamily = modelLatency.data.find(item => item.id)?.id;
+    if (latencyFamily) {
+        const latencyModels = await request(
+            baseUrl,
+            `/api/api-management/model-latency?groupBy=model&family=${encodeURIComponent(latencyFamily)}`
+        );
+        if (
+            latencyModels.mode !== 'modelDetails'
+            || latencyModels.data.some(item => item.avgLatency == null || !item.label)
+        ) {
+            throw new Error('Model latency drilldown must expose model latency within a model family');
+        }
+    }
 
     const hierarchy = await request(baseUrl, '/api/api-management/hierarchy');
     if (hierarchy.data.some(item =>

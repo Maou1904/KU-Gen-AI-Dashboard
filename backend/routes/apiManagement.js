@@ -248,15 +248,25 @@ router.get('/model-latency', async (req, res, next) => {
         const appKey = /^\d+$/.test(String(req.query.appKey || ''))
             ? Number(req.query.appKey)
             : null;
+        const family = req.query.family || null;
         const groupByModel = req.query.groupBy === 'model';
-        const groupSelect = groupByModel
+        const modelDetail = groupByModel && family;
+        const groupSelect = modelDetail
+            ? `COALESCE(model_key::text, 'unknown') AS id,
+                COALESCE(model_name, 'Unknown model') AS label,
+                COALESCE(provider, 'unknown') AS "groupLabel"`
+            : groupByModel
             ? `model_family AS id,
                 model_family AS label,
                 'Model family' AS "groupLabel"`
             : `CASE WHEN $6::bigint IS NULL THEN app_key::text ELSE COALESCE(model_key::text, 'unknown') END AS id,
                 CASE WHEN $6::bigint IS NULL THEN app_name ELSE COALESCE(model_name, 'Unknown model') END AS label,
                 CASE WHEN $6::bigint IS NULL THEN app_name ELSE provider END AS "groupLabel"`;
-        const groupBy = groupByModel
+        const groupBy = modelDetail
+            ? `COALESCE(model_key::text, 'unknown'),
+                COALESCE(model_name, 'Unknown model'),
+                COALESCE(provider, 'unknown')`
+            : groupByModel
             ? 'model_family'
             : `CASE WHEN $6::bigint IS NULL THEN app_key::text ELSE COALESCE(model_key::text, 'unknown') END,
                 CASE WHEN $6::bigint IS NULL THEN app_name ELSE COALESCE(model_name, 'Unknown model') END,
@@ -275,6 +285,7 @@ router.get('/model-latency', async (req, res, next) => {
                 LEFT JOIN dim_model m ON m.model_key = s.model_key
                 WHERE s.latency_seconds IS NOT NULL
                   AND ($6::bigint IS NULL OR s.app_key = $6)
+                  AND ($7::text IS NULL OR ${modelFamilySql('m')} = $7)
                   AND ${filter.sql}
              )
              SELECT
@@ -286,13 +297,13 @@ router.get('/model-latency', async (req, res, next) => {
              GROUP BY ${groupBy}
              ORDER BY "avgLatency" DESC
              LIMIT 8`,
-            [...filter.params, appKey]
+            [...filter.params, appKey, family]
         );
 
         res.json({
             success: true,
             data: rows,
-            mode: groupByModel || appKey ? 'models' : 'apps',
+            mode: modelDetail ? 'modelDetails' : (groupByModel || appKey ? 'models' : 'apps'),
             source: 'dashboard_test',
         });
     } catch (error) {

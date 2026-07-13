@@ -176,7 +176,6 @@ Object.assign(App, {
                 <div class="flex justify-between items-start gap-md mb-md">
                     <div>
                         <h3 class="font-title-lg text-title-lg text-on-surface">Overview Trend</h3>
-                        <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Raw values by period, split so each metric keeps its real unit.</p>
                     </div>
                     <span class="tag-pill px-sm py-xs text-label-md">${periodLabel}</span>
                 </div>
@@ -206,71 +205,6 @@ Object.assign(App, {
                 <div class="flex justify-between items-center mb-md">
                     <h3 class="font-title-lg text-title-lg text-on-surface">Trending Note Topics</h3>
                     <span class="font-label-md text-label-md text-on-surface-variant">${latest.label || this.getFilterLabel('dashboard')}</span>
-                </div>
-                <div class="flex flex-wrap gap-sm">
-                    ${this.createTagPills(this.liveData.dashboard.topics, [0, 2, 4])}
-                </div>
-            </section>
-        `;
-    },
-
-    createDashboardV3Page() {
-        const kpis = this.getDashboardKpis();
-        const rows = this.getDashboardTrendRows();
-        const granularity = rows[0]?.granularity || this.getDateGranularity(this.state.dashboard.filter.date);
-        const stats = this.getDashboardTrendStats(rows);
-        const periodLabel = this.getPeriodScopeLabel(granularity);
-        const tokenPerTransaction = stats.totalTransactions
-            ? stats.totalTokens / stats.totalTransactions
-            : 0;
-
-        return `
-            ${this.createPageHeader(
-                'Dashboard V3',
-                'Demand and AI workload in one view for a cleaner executive read.',
-                this.createFilterToolbar('dashboard')
-            )}
-
-            <div class="bento-grid mb-gutter">
-                <section class="col-span-8 glass-panel rounded-lg p-lg">
-                    <div class="flex justify-between items-start gap-md mb-md">
-                        <div>
-                            <h3 class="font-title-lg text-title-lg text-on-surface">Workload Overview</h3>
-                            <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Transactions are plotted against token volume on a separate axis.</p>
-                        </div>
-                        <span class="tag-pill px-sm py-xs text-label-md">${periodLabel}</span>
-                    </div>
-                    <div class="chart-container-lg">
-                        <canvas id="dashboardWorkloadChart"></canvas>
-                    </div>
-                </section>
-                <section class="col-span-4 glass-panel rounded-lg p-lg">
-                    <h3 class="font-title-lg text-title-lg text-on-surface mb-md">Workload Signals</h3>
-                    <div class="grid gap-md">
-                        <div class="rounded border border-outline-variant p-md">
-                            <p class="font-label-md text-label-md text-on-surface-variant">Total tokens</p>
-                            <div class="font-headline-md text-headline-md text-primary mt-xs">${this.formatTokenUnits(stats.totalTokens)}</div>
-                        </div>
-                        <div class="rounded border border-outline-variant p-md">
-                            <p class="font-label-md text-label-md text-on-surface-variant">Tokens / transaction</p>
-                            <div class="font-headline-md text-headline-md text-on-surface mt-xs">${this.formatTokenUnits(tokenPerTransaction)}</div>
-                        </div>
-                        <div class="rounded border border-outline-variant p-md">
-                            <p class="font-label-md text-label-md text-on-surface-variant">Peak transaction period</p>
-                            <div class="font-title-md text-title-md text-on-surface mt-xs">${stats.peak?.label || '-'}</div>
-                        </div>
-                    </div>
-                </section>
-            </div>
-
-            <div class="grid grid-cols-4 gap-gutter mb-gutter">
-                ${kpis.map(k => this.createKPICard(k.label, k.value, k.change, k.icon, k.type)).join('')}
-            </div>
-
-            <section class="glass-panel rounded-lg p-lg">
-                <div class="flex justify-between items-center mb-md">
-                    <h3 class="font-title-lg text-title-lg text-on-surface">Trending Note Topics</h3>
-                    <span class="font-headline-md text-headline-md text-on-surface">#</span>
                 </div>
                 <div class="flex flex-wrap gap-sm">
                     ${this.createTagPills(this.liveData.dashboard.topics, [0, 2, 4])}
@@ -319,7 +253,10 @@ Object.assign(App, {
             p95Latency: Number(row.p95Latency || 0),
             events: Number(row.events || 0),
         }));
-        const latencyTitle = 'Model Latency';
+        const activeLatencyFamily = state.latencyFamily;
+        const latencyTitle = activeLatencyFamily
+            ? `${state.latencyFamilyLabel || activeLatencyFamily} Model Latency`
+            : 'Model Latency';
 
         return `
             ${this.createPageHeader(
@@ -416,21 +353,28 @@ Object.assign(App, {
             <section class="glass-panel rounded-lg p-lg mb-gutter">
                 <div class="flex justify-between items-start gap-md mb-md">
                     <div>
+                        ${activeLatencyFamily ? `
+                            <button type="button" class="inline-flex items-center gap-xs text-primary font-label-md mb-sm" data-latency-back>
+                                <span class="material-symbols-outlined text-[18px]">arrow_back</span> Back to models
+                            </button>
+                        ` : ''}
                         <h3 class="font-title-lg text-title-lg text-on-surface">${latencyTitle}</h3>
-                        <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Average response latency grouped by model.</p>
+                        <p class="font-label-md text-label-md text-on-surface-variant mt-xs">
+                            ${activeLatencyFamily ? 'Average response latency by model in this family.' : 'Average response latency grouped by model family.'}
+                        </p>
                     </div>
-                    <span class="tag-pill px-sm py-xs text-label-md">Models</span>
+                    <span class="tag-pill px-sm py-xs text-label-md">${activeLatencyFamily ? 'Model detail' : 'Models'}</span>
                 </div>
                 <div class="chart-container-lg">
                     <canvas id="consumptionLatencyChart"></canvas>
                 </div>
                 <div class="mt-md grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-sm">
                     ${latencyRows.map(row => `
-                        <div class="rounded border border-outline-variant p-sm">
+                        <button type="button" class="rounded border border-outline-variant p-sm text-left hover:bg-surface-container-high transition-colors" ${activeLatencyFamily ? '' : `data-latency-family="${row.id}" data-latency-label="${row.label}"`}>
                             <div class="font-label-md text-label-md text-on-surface truncate">${row.label}</div>
                             <div class="font-body-md text-body-md text-on-surface-variant mt-xs">Avg ${row.avgLatency.toFixed(2)}s / P95 ${row.p95Latency.toFixed(2)}s</div>
                             <div class="font-body-md text-body-md text-on-surface-variant">${row.events.toLocaleString()} events</div>
-                        </div>
+                        </button>
                     `).join('') || '<p class="font-body-md text-body-md text-on-surface-variant">No latency data matches the selected filters.</p>'}
                 </div>
             </section>
@@ -469,53 +413,6 @@ Object.assign(App, {
                 </div>
             </section>
             ${this.createPagination(totalPages, state.hierarchyPage, 'consumption')}
-        `;
-    },
-
-    createConsumptionV3Page() {
-        const tokenData = this.getConsumptionMonthlyTokenData(true);
-        const yearTotals = tokenData.series.map(item => ({
-            label: item.label,
-            total: item.data[item.data.length - 1] || 0,
-        })).sort((a, b) => b.total - a.total);
-        const topYear = yearTotals[0];
-
-        return `
-            ${this.createPageHeader(
-                'Consumption V3',
-                'Cumulative token burn-up for year-over-year pacing.',
-                this.createFilterToolbar('consumption')
-            )}
-
-            <div class="bento-grid mb-gutter">
-                <section class="col-span-9 glass-panel rounded-lg p-lg">
-                    <div class="flex justify-between items-start gap-lg mb-md">
-                        <div>
-                            <h3 class="font-title-lg text-title-lg text-on-surface">Cumulative Token Pace</h3>
-                            <p class="font-label-md text-label-md text-on-surface-variant mt-xs">Each line accumulates monthly tokens so growth pace is easier to compare.</p>
-                        </div>
-                        ${this.createCompareYearsControl()}
-                    </div>
-                    <div class="chart-container-lg">
-                        <canvas id="consumptionCumulativeChart"></canvas>
-                    </div>
-                </section>
-                <section class="col-span-3 glass-panel rounded-lg p-lg">
-                    <h3 class="font-title-lg text-title-lg text-on-surface mb-md">Year Ranking</h3>
-                    <div class="space-y-sm">
-                        ${yearTotals.map((item, index) => `
-                            <div class="flex justify-between items-center gap-sm rounded border border-outline-variant p-sm">
-                                <span class="font-label-md text-label-md text-on-surface">${index + 1}. ${item.label}</span>
-                                <span class="font-label-md text-label-md text-primary">${this.formatTokenUnits(item.total)}</span>
-                            </div>
-                        `).join('') || '<p class="font-body-md text-body-md text-on-surface-variant">No yearly token data.</p>'}
-                    </div>
-                    <div class="mt-md pt-md border-t border-outline-variant">
-                        <p class="font-label-md text-label-md text-on-surface-variant">Highest token year</p>
-                        <div class="font-headline-md text-headline-md text-primary mt-xs">${topYear?.label || '-'}</div>
-                    </div>
-                </section>
-            </div>
         `;
     },
 
@@ -569,7 +466,7 @@ Object.assign(App, {
             </div>
 
             <div class="bento-grid">
-                <section class="col-span-5 glass-panel rounded-lg p-lg">
+                <section class="col-span-6 glass-panel rounded-lg p-lg">
                     <div class="flex justify-between items-start gap-md mb-md">
                         <div>
                             <h3 class="font-title-lg text-title-lg text-on-surface flex items-center gap-sm">
@@ -579,8 +476,8 @@ Object.assign(App, {
                         </div>
                         <span class="tag-pill px-sm py-xs text-label-md">${totalAppTransactions.toLocaleString()} tx</span>
                     </div>
-                    <div class="grid grid-cols-[minmax(0,1fr)_190px] gap-lg items-center consumption-chart-layout">
-                        <div class="chart-container">
+                    <div class="grid grid-cols-[minmax(240px,1fr)_minmax(170px,220px)] gap-lg items-center consumption-chart-layout">
+                        <div class="chart-container-lg">
                             <canvas id="behaviorV2AppDonut"></canvas>
                         </div>
                         <div class="space-y-xs">
@@ -597,7 +494,7 @@ Object.assign(App, {
                     </div>
                 </section>
 
-                <section class="col-span-7 glass-panel rounded-lg p-lg">
+                <section class="col-span-6 glass-panel rounded-lg p-lg">
                     <div class="flex justify-between items-start gap-md mb-md">
                         <div>
                             <h3 class="font-title-lg text-title-lg text-on-surface flex items-center gap-sm">
@@ -1049,9 +946,10 @@ Object.assign(App, {
             dify: 'Dify',
         };
         const themes = [
-            ['forest', 'Forest', '#0d631b'],
-            ['ocean', 'Ocean', '#0054a7'],
-            ['graphite', 'Graphite', '#343a40'],
+            ['green', 'Green', '#0d631b'],
+            ['blue', 'Blue', '#0054a7'],
+            ['black', 'Black', '#1b1c1c'],
+            ['red', 'Red', '#c62828'],
         ];
 
         return `
@@ -1312,27 +1210,21 @@ Object.assign(App, {
         if (page === 'dashboardv2') {
             const rows = this.getDashboardTrendRows();
             const labels = rows.map(item => item.label);
-            Charts.createDualMetricLineChart(
+            Charts.createDualAxisComboChart(
                 'dashboardEngagementTrendChart',
                 labels,
-                this.getDashboardOverviewSeries(rows, ['activeUsers', 'transactions'])
+                rows.map(item => Number(item.transactions || 0)),
+                rows.map(item => Number(item.activeUsers || 0)),
+                'Transactions',
+                'Active Users'
             );
-            Charts.createDualMetricLineChart(
+            Charts.createDualAxisComboChart(
                 'dashboardConsumptionTrendChart',
                 labels,
-                this.getDashboardOverviewSeries(rows, ['tokens', 'coins'])
-            );
-            return;
-        }
-        if (page === 'dashboardv3') {
-            const rows = this.getDashboardTrendRows();
-            Charts.createDualAxisComboChart(
-                'dashboardWorkloadChart',
-                rows.map(item => item.label),
-                rows.map(item => item.transactions),
-                rows.map(item => item.tokens),
-                'Transactions',
-                'Tokens'
+                rows.map(item => Number(item.tokens || 0)),
+                rows.map(item => Number(item.coins || 0)),
+                'Token Consumption',
+                'Coin Consumption'
             );
             return;
         }
@@ -1402,12 +1294,6 @@ Object.assign(App, {
                 'Avg Latency',
                 { valueSuffix: 's' }
             );
-            return;
-        }
-
-        if (page === 'consumptionv3') {
-            const tokenData = this.getConsumptionMonthlyTokenData(true);
-            Charts.createMultiLineChart('consumptionCumulativeChart', tokenData.labels, tokenData.series);
             return;
         }
 
@@ -1487,7 +1373,8 @@ Object.assign(App, {
                 'behaviorAppsBarChart',
                 appData.map(item => item.app),
                 appData.map(item => item.usageCount),
-                'Transactions'
+                'Transactions',
+                { valueLabelOffsetX: 28, layoutRight: 64 }
             );
             return;
         }

@@ -20,6 +20,8 @@ const App = {
             },
             selectedYears: [],
             drilldownApp: null,
+            latencyFamily: null,
+            latencyFamilyLabel: '',
             hierarchyPage: 1,
             hierarchyPageSize: 7,
         },
@@ -38,7 +40,7 @@ const App = {
             },
         },
         settings: {
-            theme: 'forest',
+            theme: 'green',
             compactTables: false,
             schedule: null,
             scheduleLoading: false,
@@ -157,8 +159,8 @@ const App = {
     },
 
     getDataPage(page) {
-        if (page === 'dashboardv2' || page === 'dashboardv3') return 'dashboard';
-        if (page === 'consumptionv2' || page === 'consumptionv3') return 'api';
+        if (page === 'dashboardv2') return 'dashboard';
+        if (page === 'consumptionv2') return 'api';
         if (page === 'ubv2') return 'behavior';
         return page;
     },
@@ -236,6 +238,21 @@ const App = {
 
         if (event.target.closest('[data-app-back]')) {
             this.state.consumption.drilldownApp = null;
+            this.render(this.currentPage);
+            return;
+        }
+
+        const latencyFamily = event.target.closest('[data-latency-family]');
+        if (latencyFamily) {
+            this.state.consumption.latencyFamily = latencyFamily.dataset.latencyFamily;
+            this.state.consumption.latencyFamilyLabel = latencyFamily.dataset.latencyLabel || latencyFamily.dataset.latencyFamily;
+            this.render(this.currentPage);
+            return;
+        }
+
+        if (event.target.closest('[data-latency-back]')) {
+            this.state.consumption.latencyFamily = null;
+            this.state.consumption.latencyFamilyLabel = '';
             this.render(this.currentPage);
             return;
         }
@@ -356,17 +373,11 @@ const App = {
             case 'dashboardv2':
                 content = this.createDashboardV2Page();
                 break;
-            case 'dashboardv3':
-                content = this.createDashboardV3Page();
-                break;
             case 'api':
                 content = this.createConsumptionPage();
                 break;
             case 'consumptionv2':
                 content = this.createConsumptionV2Page();
-                break;
-            case 'consumptionv3':
-                content = this.createConsumptionV3Page();
                 break;
             case 'department':
                 content = this.createAnalyticsPage();
@@ -428,7 +439,11 @@ const App = {
 
         if (dataPage === 'api') {
             const family = this.state.consumption.drilldownApp;
-            const latencyQuery = `${query}${query ? '&' : '?'}groupBy=model`;
+            const latencyFamily = this.state.consumption.latencyFamily;
+            const latencyParams = latencyFamily
+                ? `groupBy=model&family=${encodeURIComponent(latencyFamily)}`
+                : 'groupBy=model';
+            const latencyQuery = `${query}${query ? '&' : '?'}${latencyParams}`;
             const [providers, models, hierarchy, costs, monthly, latency] = await Promise.all([
                 API.getProviderConsumption(query),
                 API.getModelConsumption(`${query}${query ? '&' : '?'}${family ? `family=${encodeURIComponent(family)}` : ''}`.replace(/[?&]$/, '')),
@@ -447,7 +462,7 @@ const App = {
                     costs: successful(costs),
                     monthly: successful(monthly),
                     latency: successful(latency) || [],
-                    latencyMode: latency?.mode || 'models',
+                    latencyMode: latency?.mode || (latencyFamily ? 'modelDetails' : 'models'),
                 };
             }
         }
@@ -688,6 +703,8 @@ const App = {
         };
         if (page === 'consumption') {
             this.state.consumption.drilldownApp = null;
+            this.state.consumption.latencyFamily = null;
+            this.state.consumption.latencyFamilyLabel = '';
             this.state.consumption.selectedYears = [String(latestDate.year)];
         }
         this.openDropdown = null;
@@ -1316,11 +1333,15 @@ const App = {
 
     generateFullHeatmapGrid(data = null) {
         const palettes = {
+            green: ['#dde8dd', '#bad0bd', '#8db394', '#4a8655', '#0d631b'],
+            blue: ['#e1edf6', '#bfd8e9', '#8db9d7', '#4d8dbb', '#0054a7'],
+            black: ['#e6e7e7', '#c9cece', '#9ca3a3', '#5a6060', '#1b1c1c'],
+            red: ['#f5dddd', '#edbcbc', '#e06b6b', '#d64040', '#c62828'],
             forest: ['#dde8dd', '#bad0bd', '#8db394', '#4a8655', '#0d631b'],
             ocean: ['#e1edf6', '#bfd8e9', '#8db9d7', '#4d8dbb', '#0054a7'],
-            graphite: ['#e5e7e9', '#c9ced2', '#a5adb4', '#737d85', '#343a40'],
+            graphite: ['#e6e7e7', '#c9cece', '#9ca3a3', '#5a6060', '#1b1c1c'],
         };
-        const colors = palettes[this.state.settings.theme] || palettes.forest;
+        const colors = palettes[this.state.settings.theme] || palettes.green;
         const values = Array.from({ length: 56 }, () => 0);
         if (Array.isArray(data)) {
             data.forEach(item => {
